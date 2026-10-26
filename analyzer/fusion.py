@@ -37,27 +37,35 @@ def _norm_noise_type(t: str) -> str:
     return _NOISE_ALIASES.get(s.lower(), s)
 
 
+STEADY_NOISE_SNR_DB = 30  # real calls: TV call 25.6 dB vs clean calls 44-45 dB; 0 FPs on synthetic set
+
+
+def dsp_noise(features: dict) -> tuple[bool, str, str]:
+    """Steady background noise from measurements: (present, type, severity).
+    Catches stationary noise (hiss, hum, distant babble) that the audio LLM tends to under-report;
+    cannot see intermittent noise such as line static (the LLM covers that)."""
+    snr = features["snr_db"]
+    hum = (features.get("noise_hum_db") or 0) > 6
+    present = snr < STEADY_NOISE_SNR_DB or hum
+    if not present:
+        return False, "", "none"
+    sev = "high" if snr < 15 else "medium" if snr < 22 else "low"
+    harm = features.get("noise_harmonicity") or 0
+    if hum:
+        ntype = "electrical hum"
+    elif harm > 0.45:
+        ntype = "music or TV"
+    elif features["noise_burst_frac"] > 0.15:
+        ntype = "static"
+    else:
+        ntype = "steady background noise"
+    return True, ntype, sev
+
+
 def dsp_only(features: dict, cfg: Config) -> dict:
     """Rules-only baseline (no learned model). Also used as the fallback when the LLM is unavailable."""
     snr = features["snr_db"]
-    noise = snr < 30
-    if snr < 15:
-        sev = "high"
-    elif snr < 22:
-        sev = "medium"
-    else:
-        sev = "low"
-    ntype = ""
-    if noise:
-        harm = features.get("noise_harmonicity") or 0
-        if (features.get("noise_hum_db") or 0) > 6:
-            ntype = "electrical hum"
-        elif harm > 0.45:
-            ntype = "music or TV"
-        elif features["noise_burst_frac"] > 0.15:
-            ntype = "static"
-        else:
-            ntype = "background noise"
+    noise, ntype, sev = dsp_noise(features)
     quality = "clear"
     if features["clipping_suspected"] or features["rms_dbfs"] < -45:
         quality = "slightly_impaired"
@@ -69,7 +77,7 @@ def dsp_only(features: dict, cfg: Config) -> dict:
         "emotional_intensity": "medium",
         "background_noise_present": noise,
         "background_noise_type": ntype,
-        "background_noise_severity": sev if noise else "none",
+        "background_noise_severity": sev,
         "audio_quality": quality,
         "speaker_overlap_present": overlap,
         "long_silence_present": features["longest_interior_gap_s"] >= cfg.long_silence_s,
@@ -106,7 +114,8 @@ def fuse(candidates: list[dict], features: dict, cfg: Config, use_dsp_overrides:
     gap = features["longest_interior_gap_s"]
     if use_dsp_overrides:
         # Objective fields: trust measurement where it is reliable.
-        long_silence = gap >= cfg.long_silence_s or (silence_llm and gap >= 0.6 * cfg.long_silence_s)
+        # DSP-only: 100% on the synthetic silence set; letting the LLM flip borderline gaps hurt (exp D vs A).
+        long_silence = gap >= cfg.long_silence_s
         if features.get("stereo_split"):
             overlap = features.get("overlap_s", 0) >= 1.5 and features.get("overlap_longest_s", 0) >= 0.5
         else:
@@ -115,8 +124,16 @@ def fuse(candidates: list[dict], features: dict, cfg: Config, use_dsp_overrides:
         # are unreliable after lossy coding and fire on line static (labeled as noise, not quality).
         if (features["clipping_suspected"] or features["rms_dbfs"] < -45) and quality == "clear":
             quality = "slightly_impaired"
+        # Noise = LLM (intermittent sounds, voices, TV) OR DSP (steady noise the LLM under-reports).
+        d_present, d_type, d_sev = dsp_noise(features)
+        sources_agree = d_present == noise_present
+        if d_present and not noise_present:
+            noise_present, ntype, sev = True, d_type, d_sev
+        elif d_present and SEVERITIES.index(d_sev) > SEVERITIES.index(sev):
+            sev = d_sev  # measured level is louder than the model judged
     else:
         long_silence, overlap = silence_llm, overlap_llm
+        sources_agree = True
 
     diag = {
         "tone_agreement": round(_agreement(tones, tone), 2),
@@ -127,6 +144,7 @@ def fuse(candidates: list[dict], features: dict, cfg: Config, use_dsp_overrides:
         "overlap_agreement": round(overlap_agree, 2),
         "samples": k,
         "silence_margin_s": round(abs(gap - cfg.long_silence_s), 2),
+        "noise_sources_agree": sources_agree,
     }
     pred = coerce({
         "emotional_tone": tone,
@@ -154,15 +172,17 @@ _CONF_WEIGHTS = {
 
 
 def confidence(diag: dict) -> float:
-    """Self-consistency confidence. With a single sample, agreement is uninformative, so return a
-    prior (0.7) instead of a spurious 1.0. Silence margin <2s slightly reduces confidence.
+    """Self-consistency confidence. With a single sample, agreement is uninformative, so start from a
+    prior (0.68) instead of a spurious 1.0. Adjusted by LLM/DSP agreement on noise and the silence margin.
     Calibrated only loosely (n=3 labeled calls); see docs/MEMO.md."""
     if diag["samples"] <= 1:
-        base = 0.7
+        base = 0.68
     else:
         agree = sum(diag[k] * w for k, w in _CONF_WEIGHTS.items())
         # Map agreement in [~0.33, 1] to [0.3, 0.92]; perfect agreement is still not certainty.
         base = 0.3 + (agree - 1 / 3) / (2 / 3) * 0.62
     if diag["silence_margin_s"] < 2:
         base -= 0.05
+    # Independent noise evidence: measurement and model agreeing is informative either way.
+    base += 0.04 if diag.get("noise_sources_agree", True) else -0.08
     return round(min(0.95, max(0.05, base)), 2)

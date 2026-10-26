@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 from . import audio_io, dsp, fusion, llm
-from .config import Config, choose_samples
+from .config import COMPACT_BELOW_S, Config, choose_samples
 
 
 def analyze_file(path: str | Path, cfg: Config | None = None) -> tuple[dict, dict]:
@@ -34,10 +34,11 @@ def analyze_file(path: str | Path, cfg: Config | None = None) -> tuple[dict, dic
     else:
         k = choose_samples(cfg, audio.duration_s)
         api_audio = audio_io.encode_for_api(audio.mono)
-        candidates, lmeta = llm.classify(cfg, api_audio, feats, k)
+        candidates, lmeta = llm.classify(cfg, api_audio, feats, k, compact=audio.duration_s < COMPACT_BELOW_S)
         pred, diag = fusion.fuse(candidates, feats, cfg, use_dsp_overrides=(cfg.backend == "hybrid"))
         meta.update(lmeta)
         meta["diagnostics"] = diag
+        meta["candidates"] = candidates  # raw model outputs: lets fusion changes be re-scored offline
         meta["evidence"] = [{"customer": c.get("customer_evidence", ""), "noise": c.get("noise_evidence", "")}
                             for c in candidates]
 

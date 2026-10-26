@@ -29,7 +29,7 @@ def test_dsp_backend_end_to_end(make_wav):
 
 
 def test_budget_guard_never_exceeds_ceiling():
-    cfg = Config(model="gemini-2.5-flash-lite", max_samples=3)
+    cfg = Config(model="gemini-3.5-flash-lite", max_samples=3)
     for d in (5, 15, 30, 60, 180, 900):
         k = choose_samples(cfg, d)
         assert estimate_call_cost(cfg, d, k) / (max(d, 1) / 60) <= 0.003 or k == 1
@@ -38,7 +38,7 @@ def test_budget_guard_never_exceeds_ceiling():
 def test_fusion_majority_and_tiebreak():
     cfg = Config()
     feats = {"longest_interior_gap_s": 2.0, "clipping_frac": 0, "dropouts": 0, "stereo_split": False,
-             "clipping_suspected": False, "rms_dbfs": -20}
+             "clipping_suspected": False, "rms_dbfs": -20, "snr_db": 45, "noise_burst_frac": 0.1}
     c = [{"emotional_tone": "upset", "emotional_intensity": "high", "background_noise_present": True,
           "background_noise_type": "television", "background_noise_severity": "medium"},
          {"emotional_tone": "frustrated", "emotional_intensity": "medium", "background_noise_present": True,
@@ -49,3 +49,11 @@ def test_fusion_majority_and_tiebreak():
     assert pred["background_noise_type"] == "TV"
     assert diag["tone_agreement"] == pytest.approx(0.67, abs=0.01)
     assert 0.05 <= pred["confidence"] <= 0.95
+
+
+def test_fusion_adds_steady_noise_llm_missed():
+    cfg = Config()
+    feats = {"longest_interior_gap_s": 2.0, "clipping_suspected": False, "rms_dbfs": -20, "stereo_split": False,
+             "snr_db": 12, "noise_burst_frac": 0.05, "noise_hum_db": 0, "noise_harmonicity": 0.2}
+    pred, _ = fusion.fuse([{"emotional_tone": "neutral", "background_noise_present": False}], feats, cfg)
+    assert pred["background_noise_present"] and pred["background_noise_severity"] == "high"

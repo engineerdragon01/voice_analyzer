@@ -33,7 +33,7 @@ def summarize(meta_path: str) -> dict:
     return out
 
 
-def projection_table(model: str = "gemini-2.5-flash-lite") -> str:
+def projection_table(model: str = "gemini-3.5-flash-lite") -> str:
     cfg = Config(model=model)
     lines = ["| clip length | samples (k) | est. cost/clip | est. cost/audio-min |", "|---|---|---|---|"]
     for d in (15, 30, 60, 120, 300, 900):
@@ -45,6 +45,6 @@ def projection_table(model: str = "gemini-2.5-flash-lite") -> str:
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--projection":
-        print(projection_table(sys.argv[2] if len(sys.argv) > 2 else "gemini-2.5-flash-lite"))
+        print(projection_table(sys.argv[2] if len(sys.argv) > 2 else "gemini-3.5-flash-lite"))
     else:
         print(json.dumps(summarize(sys.argv[1]), indent=2))
