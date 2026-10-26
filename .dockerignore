@@ -1,0 +1,9 @@
+data/
+results/
+tests/
+docs/
+eval/
+.git/
+**/__pycache__
+*.db
+.env

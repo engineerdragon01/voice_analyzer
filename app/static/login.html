@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · AutoAce Voice Analyzer</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main>
+  <section class="panel login">
+    <h2>AutoAce Voice Analyzer</h2>
+    <p class="muted small">Emotional tone &amp; background-noise analysis for call audio.</p>
+    <form id="f">
+      <label for="u">Username</label><input id="u" name="username" type="text" autocomplete="username" required>
+      <label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required>
+      <p id="msg" class="err small"></p>
+      <button class="primary" type="submit" style="width:100%">Sign in</button>
+    </form>
+  </section>
+</main>
+<script src="/static/login.js"></script>
+</body>
+</html>

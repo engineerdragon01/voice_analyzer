@@ -65,6 +65,9 @@ def vad(x: np.ndarray) -> tuple[np.ndarray, dict]:
     thr = _otsu_threshold(db)
     # Keep threshold sane: at least 9 dB above floor, at most 25 dB below speech peak.
     thr = float(np.clip(thr, floor + 9, max(floor + 9, peak - 6)))
+    if peak - floor < 15:
+        # Little dynamic range: either continuous speech or continuous silence. Use an absolute gate.
+        thr = max(peak - 15, -55.0)
     raw = db > thr
     mask = _smooth_bool(raw, min_on=5, min_off=15)  # 100 ms min speech, bridge 300 ms gaps
     return mask, {"floor_db": floor, "peak_db": peak, "threshold_db": thr, "frame_db": db}
@@ -154,11 +157,10 @@ def features(stereo: np.ndarray, mono: np.ndarray) -> dict:
     burst_frac = float(np.mean(db[nonspeech] > noise_db + 10)) if nonspeech.sum() > 10 else 0.0
     noise_var_db = float(np.std(db[nonspeech])) if nonspeech.sum() > 10 else 0.0
 
-    # Quality
-    clip_frac = float(np.mean(np.abs(mono) >= 0.98))
-    zeros = (np.abs(mono) < 1e-6).astype(np.int8)
-    zr = _runs(zeros.astype(bool), True)
-    dropouts = sum(1 for s, e in zr if (e - s) >= 0.02 * SR and s > SR * 0.2 and e < len(mono) - SR * 0.2)
+    # Quality (codec-robust: lossy re-encoding smears clipped plateaus and digital zeros)
+    clip_frac = _clipping_fraction(mono)
+    kurt = speech_kurtosis(mono, speech)
+    dropouts = _dropouts(mono, speech, noise_db)
     rms_dbfs = float(20 * np.log10(np.sqrt(np.mean(mono**2)) + EPS))
 
     ns = _spectral_stats(mono, nonspeech)
@@ -185,9 +187,15 @@ def features(stereo: np.ndarray, mono: np.ndarray) -> dict:
         "noise_harmonicity": None if harm_ns is None else round(harm_ns, 3),
         "speech_rolloff95_hz": None if sp["rolloff95_hz"] is None else round(sp["rolloff95_hz"]),
         "clipping_frac": round(clip_frac, 5),
+        "speech_kurtosis": None if kurt is None else round(kurt, 2),
         "dropouts": int(dropouts),
         "rms_dbfs": round(rms_dbfs, 1),
+        "peak_p999": round(float(np.percentile(np.abs(mono), 99.9)), 3),
     }
+    out["clipping_suspected"] = bool(
+        out["clipping_frac"] > 0.01
+        or (kurt is not None and kurt < 2.5 and out["peak_p999"] > 0.5)
+    )
     if stereo_split:
         out.update(_overlap_stereo(L, R))
     return out
@@ -207,3 +215,41 @@ def _overlap_stereo(L: np.ndarray, R: np.ndarray) -> dict:
         "overlap_events": len(runs),
         "overlap_longest_s": round(max(((e - s) / fps for s, e in runs), default=0.0), 2),
     }
+
+
+def _clipping_fraction(x: np.ndarray) -> float:
+    """Share of samples piled up near the peak (direct measure, reliable on lossless input)."""
+    peak = float(np.percentile(np.abs(x), 99.99))
+    if peak < 0.3:  # quiet recordings cannot be clipped
+        return 0.0
+    return float(np.mean(np.abs(x) >= 0.9 * peak))
+
+
+def speech_kurtosis(x: np.ndarray, speech_mask: np.ndarray) -> float | None:
+    """Kurtosis of speech samples. Natural speech is peaky (kurtosis ~5-30); hard clipping flattens
+    the distribution toward ~1.5-3. Unlike plateau counting, this survives Opus/MP3 re-encoding."""
+    m = np.repeat(speech_mask, HOP)
+    sp = x[: len(m)][m]
+    if len(sp) < SR:
+        return None
+    v = np.mean(sp**2)
+    return float(np.mean(sp**4) / (v**2 + EPS))
+
+
+def _dropouts(x: np.ndarray, speech_mask: np.ndarray, noise_db: float) -> int:
+    """Packet-loss style gaps: 20-250 ms stretches inside speech regions that fall below the
+    background level and are >=35 dB under the speech immediately before and after (abrupt
+    drop-and-recover). Natural pauses decay gradually or stay near the background level."""
+    hop = 160
+    n = len(speech_mask) * (HOP // hop)
+    e = 10 * np.log10(np.mean(x[: n * hop].reshape(n, hop) ** 2, axis=1) + EPS)
+    inside = np.repeat(speech_mask, HOP // hop)
+    low = (e < noise_db - 6) & inside
+    count = 0
+    for s, t in _runs(low, True):
+        if not 2 <= t - s <= 25 or s < 5 or t + 5 > n:
+            continue
+        gap = float(np.mean(e[s:t]))
+        if e[s - 5:s].max() - gap >= 35 and e[t:t + 5].max() - gap >= 35:
+            count += 1
+    return count
