@@ -12,7 +12,10 @@ upload ─► manifest validation ─► worker pool (per-file isolation, retrie
             ─► fusion (votes + DSP-owned objective fields) ─► schema coercion ─► calibrated confidence
 ```
 
-Design rationale, validation, cost and latency are in [`docs/MEMO.md`](docs/MEMO.md).
+**Hosted:** https://autoace-voice-analyzer.onrender.com (credentials provided separately)
+
+Design rationale, validation, cost and latency are in [`docs/MEMO.md`](docs/MEMO.md); experiment tables in
+[`docs/results/`](docs/results/); predictions for the provided calls in [`predictions/`](predictions/).
 
 ## Quick start (local)
 
@@ -32,7 +35,9 @@ uvicorn app.main:app --port 8000   # open http://localhost:8000
 python cli.py path/to/batch -o results/run1 --backend hybrid     # or: gemini | dsp
 # -> results/run1.csv (name,result_json,error), .json, .meta.json (timings, cost, DSP features), .metrics.json
 python -m eval.benchmark results/run1.meta.json                   # latency + cost summary
-python -m eval.benchmark --projection gemini-2.5-flash-lite       # cost by clip length
+python -m eval.benchmark --projection gemini-3.5-flash-lite       # cost by clip length
+python -m eval.experiments data/provided docs/results/experiments.md  # full comparison matrix
+python -m eval.refuse results/run1.meta.json path/to/labels.csv    # re-score fusion changes offline (no API calls)
 ```
 
 If the manifest has labels, accuracy, macro-F1 and a tone confusion matrix are printed (and shown in the dashboard).
@@ -56,8 +61,9 @@ python -m eval.synthetic score data/synthetic/labels.csv results/synthetic_hybri
 | Variable | Default | Purpose |
 |---|---|---|
 | `GEMINI_API_KEY` | – | Paid-tier Gemini Developer API key (required for `hybrid`/`gemini`) |
-| `GEMINI_MODEL` | `gemini-2.5-flash-lite` | Model; pricing table in `analyzer/config.py` |
-| `GEMINI_SAMPLES` | `3` | Max self-consistency samples per clip |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Model; pricing table in `analyzer/config.py` |
+| `GEMINI_SAMPLES` | `3` | Max self-consistency samples per clip (budget guard may lower it) |
+| `PROMPT_VERSION` | `v2` | Prompt file in `analyzer/prompts/` |
 | `TARGET_COST_PER_MIN` | `0.0025` | Budget guard: k is lowered per clip so projected cost stays below this |
 | `ANALYZER_BACKEND` | `hybrid` | Default backend |
 | `LONG_SILENCE_S` | `10` | Interior dead-air threshold (seconds) |

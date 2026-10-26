@@ -7,10 +7,14 @@ import time
 from pathlib import Path
 
 from .config import Config
-from .schema import LLM_RESPONSE_SCHEMA
+from .schema import LLM_RESPONSE_SCHEMA, compact_schema
 
-PROMPT_VERSION = "v1"
-_PROMPT = (Path(__file__).parent / "prompts" / f"{PROMPT_VERSION}.txt").read_text()
+PROMPT_VERSION = os.getenv("PROMPT_VERSION", "v2")
+_PROMPT_DIR = Path(__file__).parent / "prompts"
+
+
+def _prompt(version: str) -> str:
+    return (_PROMPT_DIR / f"{version}.txt").read_text()
 _client = None
 
 
@@ -43,8 +47,8 @@ def dsp_summary(f: dict) -> str:
         f"- Duration {f['duration_s']:.0f}s; speech present in {f['speech_ratio']*100:.0f}% of frames.",
         f"- Longest pause between speech inside the call: {f['longest_interior_gap_s']:.1f}s "
         f"(leading {f['leading_silence_s']:.1f}s, trailing {f['trailing_silence_s']:.1f}s).",
-        f"- Speech-to-background level ratio (SNR): {f['snr_db']:.0f} dB "
-        f"(>35 dB is a very quiet background; <20 dB means a loud background).",
+        f"- Speech-to-steady-background level ratio: {f['snr_db']:.0f} dB "
+        f"(steady noise only; intermittent sounds are not reflected).",
         f"- Clipping {'SUSPECTED' if f['clipping_suspected'] else 'not detected'}; "
         f"possible brief dropouts: {f['dropouts']} (unreliable on compressed audio); "
         f"overall level {f['rms_dbfs']:.0f} dBFS{' (very quiet)' if f['rms_dbfs'] < -45 else ''}.",
@@ -81,26 +85,35 @@ def cost_from_usage(cfg: Config, usage: dict) -> float:
             + usage.get("out", 0) * p["out"]) / 1e6
 
 
-def classify(cfg: Config, audio_bytes: bytes, features: dict, samples: int) -> tuple[list[dict], dict]:
+def classify(cfg: Config, audio_bytes: bytes, features: dict, samples: int,
+             compact: bool = False) -> tuple[list[dict], dict]:
     """Return (list of candidate label dicts, meta{usage, cost, latency, attempts})."""
     from google.genai import types
 
     client = _get_client(cfg)
-    prompt = _PROMPT.replace("{dsp_summary}", dsp_summary(features))
+    version = getattr(cfg, "prompt_version", None) or PROMPT_VERSION
+    prompt = _prompt(version).replace("{dsp_summary}", dsp_summary(features))
+    if compact:
+        prompt = prompt[: prompt.rfind("OUTPUT")] + "OUTPUT\nReturn only the labels."
     contents = [types.Part.from_bytes(data=audio_bytes, mime_type="audio/ogg"), prompt]
 
-    def make_cfg(n: int, temp: float):
+    thinking = {"level": "minimal"}
+
+    def make_cfg(n: int, temp: float, seed: int):
         kw = dict(
             response_mime_type="application/json",
-            response_schema=LLM_RESPONSE_SCHEMA,
+            response_schema=compact_schema() if compact else LLM_RESPONSE_SCHEMA,
             temperature=temp,
             candidate_count=n,
             max_output_tokens=600,
-            seed=1234,
+            seed=seed,  # fixed per sample index: reproducible, but samples differ from each other
             http_options=types.HttpOptions(timeout=cfg.timeout_s * 1000),
         )
-        if "2.5" in cfg.model or "3" in cfg.model:
+        # Minimal reasoning: thinking tokens are billed as output and add latency.
+        if cfg.model.startswith("gemini-2.5"):
             kw["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+        elif cfg.model.startswith("gemini-3"):
+            kw["thinking_config"] = types.ThinkingConfig(thinking_level=thinking["level"])
         return types.GenerateContentConfig(**kw)
 
     t0 = time.time()
@@ -114,13 +127,19 @@ def classify(cfg: Config, audio_bytes: bytes, features: dict, samples: int) -> t
         n = samples - len(candidates) if multi_ok else 1
         temp = 0.0 if samples == 1 else cfg.temperature
         try:
-            resp = client.models.generate_content(model=cfg.model, contents=contents, config=make_cfg(n, temp))
+            resp = client.models.generate_content(model=cfg.model, contents=contents, config=make_cfg(n, temp, 1234 + len(candidates)))
         except Exception as e:  # noqa: BLE001 — SDK raises many types
             last_err = e
             msg = str(e).lower()
             if multi_ok and n > 1 and ("candidate" in msg or "invalid_argument" in msg or "400" in msg):
                 multi_ok = False  # model rejects candidate_count>1: fall back to sequential calls
                 continue
+            if "thinking level" in msg and thinking["level"] == "minimal":
+                thinking["level"] = "low"  # some models reject MINIMAL
+                continue
+            code = getattr(e, "code", None)
+            if code in (400, 401, 403, 404):
+                break  # permanent (bad key, unknown model, invalid request): don't burn retries
             time.sleep(min(2 ** attempts, 20))
             continue
         for k, v in _usage(resp).items():
@@ -135,8 +154,9 @@ def classify(cfg: Config, audio_bytes: bytes, features: dict, samples: int) -> t
         raise LLMError(f"Gemini call failed: {last_err}")
     meta = {
         "model": cfg.model,
-        "prompt_version": PROMPT_VERSION,
+        "prompt_version": version,
         "samples": len(candidates),
+        "compact": compact,
         "usage": usage_total,
         "cost_usd": round(cost_from_usage(cfg, usage_total), 6),
         "llm_latency_s": round(time.time() - t0, 2),

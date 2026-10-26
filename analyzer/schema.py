@@ -141,3 +141,14 @@ def parse_label(result_json: str | None) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         return None
     return obj if isinstance(obj, dict) else None
+
+
+def compact_schema() -> dict:
+    """Response schema without the free-text evidence fields (cheaper output for very short clips)."""
+    drop = {"customer_evidence", "noise_evidence"}
+    return {
+        "type": "object",
+        "properties": {k: v for k, v in LLM_RESPONSE_SCHEMA["properties"].items() if k not in drop},
+        "required": [k for k in LLM_RESPONSE_SCHEMA["required"] if k not in drop],
+        "propertyOrdering": [k for k in LLM_RESPONSE_SCHEMA["propertyOrdering"] if k not in drop],
+    }

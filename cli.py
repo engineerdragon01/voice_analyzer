@@ -60,6 +60,7 @@ def main() -> None:
     ap.add_argument("--model")
     ap.add_argument("--samples", type=int)
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--prompt", help="prompt version, e.g. v1 or v2")
     args = ap.parse_args()
     cfg = Config()
     if args.backend:
@@ -68,6 +69,8 @@ def main() -> None:
         cfg.model = args.model
     if args.samples:
         cfg.max_samples = args.samples
+    if args.prompt:
+        cfg.prompt_version = args.prompt
     t0 = time.time()
     rows, report = run_batch(args.folder, cfg, args.workers)
     wall = time.time() - t0
