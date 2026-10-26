@@ -3,8 +3,8 @@
     "name": "call_001.ogg",
     "meta": {
       "duration_s": 30.94,
-      "decode_s": 0.273,
-      "dsp_s": 0.145,
+      "decode_s": 0.247,
+      "dsp_s": 0.112,
       "backend": "hybrid",
       "features": {
         "duration_s": 30.94,
@@ -24,6 +24,7 @@
         "noise_hum_db": 1.9,
         "noise_centroid_hz": 631,
         "noise_harmonicity": 0.264,
+        "click_rate_per_min": 31.6,
         "speech_rolloff95_hz": 1391,
         "clipping_frac": 0.0005,
         "speech_kurtosis": 5.46,
@@ -42,20 +43,21 @@
         "text_in": 967,
         "out": 132
       },
-      "llm_latency_s": 1.84,
+      "llm_latency_s": 1.66,
       "attempts": 1,
+      "api_audio_format": "audio/flac",
       "diagnostics": {
         "tone_agreement": 1.0,
         "intensity_agreement": 1.0,
         "noise_agreement": 1.0,
-        "severity_agreement": 1.0,
+        "severity_agreement": 0.0,
         "quality_agreement": 1.0,
         "overlap_agreement": 1.0,
         "samples": 1,
         "silence_margin_s": 6.06,
         "noise_sources_agree": true
       },
-      "total_s": 3.18,
+      "total_s": 2.6,
       "cost_per_min_usd": 0.001652
     }
   },
@@ -63,8 +65,8 @@
     "name": "call_002.ogg",
     "meta": {
       "duration_s": 34.96,
-      "decode_s": 0.296,
-      "dsp_s": 0.158,
+      "decode_s": 0.271,
+      "dsp_s": 0.126,
       "backend": "hybrid",
       "features": {
         "duration_s": 34.96,
@@ -84,6 +86,7 @@
         "noise_hum_db": -0.6,
         "noise_centroid_hz": 641,
         "noise_harmonicity": 0.252,
+        "click_rate_per_min": 11.5,
         "speech_rolloff95_hz": 1750,
         "clipping_frac": 0.00056,
         "speech_kurtosis": 27.0,
@@ -92,7 +95,7 @@
         "peak_p999": 0.446,
         "clipping_suspected": false
       },
-      "cost_usd": 0.00086,
+      "cost_usd": 0.000878,
       "model": "gemini-3.5-flash-lite",
       "prompt_version": "v2",
       "samples": 1,
@@ -100,10 +103,11 @@
       "usage": {
         "audio_in": 875,
         "text_in": 967,
-        "out": 123
+        "out": 130
       },
-      "llm_latency_s": 2.16,
+      "llm_latency_s": 1.54,
       "attempts": 1,
+      "api_audio_format": "audio/flac",
       "diagnostics": {
         "tone_agreement": 1.0,
         "intensity_agreement": 1.0,
@@ -115,16 +119,16 @@
         "silence_margin_s": 6.84,
         "noise_sources_agree": false
       },
-      "total_s": 3.5,
-      "cost_per_min_usd": 0.001476
+      "total_s": 2.45,
+      "cost_per_min_usd": 0.001507
     }
   },
   {
     "name": "call_003.ogg",
     "meta": {
       "duration_s": 171.92,
-      "decode_s": 1.0,
-      "dsp_s": 0.511,
+      "decode_s": 1.083,
+      "dsp_s": 0.309,
       "backend": "hybrid",
       "features": {
         "duration_s": 171.92,
@@ -144,6 +148,7 @@
         "noise_hum_db": 0.0,
         "noise_centroid_hz": 494,
         "noise_harmonicity": 0.283,
+        "click_rate_per_min": 178.9,
         "speech_rolloff95_hz": 2094,
         "clipping_frac": 0.00031,
         "speech_kurtosis": 8.34,
@@ -152,7 +157,7 @@
         "peak_p999": 0.689,
         "clipping_suspected": false
       },
-      "cost_usd": 0.005738,
+      "cost_usd": 0.005688,
       "model": "gemini-3.5-flash-lite",
       "prompt_version": "v2",
       "samples": 3,
@@ -160,23 +165,24 @@
       "usage": {
         "audio_in": 12897,
         "text_in": 2904,
-        "out": 399
+        "out": 379
       },
-      "llm_latency_s": 5.69,
+      "llm_latency_s": 6.5,
       "attempts": 4,
+      "api_audio_format": "audio/flac",
       "diagnostics": {
         "tone_agreement": 1.0,
         "intensity_agreement": 1.0,
         "noise_agreement": 1.0,
-        "severity_agreement": 1.0,
+        "severity_agreement": 0.0,
         "quality_agreement": 1.0,
         "overlap_agreement": 1.0,
         "samples": 3,
         "silence_margin_s": 2.66,
         "noise_sources_agree": false
       },
-      "total_s": 9.6,
-      "cost_per_min_usd": 0.002003
+      "total_s": 8.19,
+      "cost_per_min_usd": 0.001985
     }
   }
 ]

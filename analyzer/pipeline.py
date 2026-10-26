@@ -33,8 +33,10 @@ def analyze_file(path: str | Path, cfg: Config | None = None) -> tuple[dict, dic
         pred = fusion.dsp_only(feats, cfg)
     else:
         k = choose_samples(cfg, audio.duration_s)
-        api_audio = audio_io.encode_for_api(audio.mono)
-        candidates, lmeta = llm.classify(cfg, api_audio, feats, k, compact=audio.duration_s < COMPACT_BELOW_S)
+        api_audio, mime = audio_io.encode_for_api(audio.mono)
+        candidates, lmeta = llm.classify(cfg, api_audio, feats, k, compact=audio.duration_s < COMPACT_BELOW_S,
+                                         mime_type=mime)
+        lmeta["api_audio_format"] = mime
         pred, diag = fusion.fuse(candidates, feats, cfg, use_dsp_overrides=(cfg.backend == "hybrid"))
         meta.update(lmeta)
         meta["diagnostics"] = diag

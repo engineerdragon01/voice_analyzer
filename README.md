@@ -6,8 +6,8 @@ review → download CSV/JSON) plus a CLI for reproducible offline runs.
 
 ```
 upload ─► manifest validation ─► worker pool (per-file isolation, retries, timeouts)
-  per file: ffmpeg decode ─► DSP features (numpy/scipy: VAD, silence, SNR, noise spectrum, clipping, level)
-                         └─► Gemini audio (16 kHz mono Opus, schema-constrained JSON, k self-consistency samples,
+  per file: ffmpeg decode ─► DSP features (numpy/scipy: VAD, silence, SNR, hum, click-rate static, clipping, level)
+                         └─► Gemini audio (16 kHz mono FLAC, schema-constrained JSON, k self-consistency samples,
                               DSP evidence in prompt)
             ─► fusion (votes + DSP-owned objective fields) ─► schema coercion ─► calibrated confidence
 ```

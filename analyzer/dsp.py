@@ -166,6 +166,7 @@ def features(stereo: np.ndarray, mono: np.ndarray) -> dict:
     ns = _spectral_stats(mono, nonspeech)
     sp = _spectral_stats(mono, speech)
     harm_ns = _harmonicity(mono, nonspeech)
+    clicks = click_rate(mono, speech)
 
     out = {
         "duration_s": round(dur, 2),
@@ -185,6 +186,7 @@ def features(stereo: np.ndarray, mono: np.ndarray) -> dict:
         "noise_hum_db": None if ns["hum_ratio_db"] is None else round(ns["hum_ratio_db"], 1),
         "noise_centroid_hz": None if ns["centroid_hz"] is None else round(ns["centroid_hz"]),
         "noise_harmonicity": None if harm_ns is None else round(harm_ns, 3),
+        "click_rate_per_min": None if clicks is None else round(clicks, 1),
         "speech_rolloff95_hz": None if sp["rolloff95_hz"] is None else round(sp["rolloff95_hz"]),
         "clipping_frac": round(clip_frac, 5),
         "speech_kurtosis": None if kurt is None else round(kurt, 2),
@@ -253,3 +255,26 @@ def _dropouts(x: np.ndarray, speech_mask: np.ndarray, noise_db: float) -> int:
         if e[s - 5:s].max() - gap >= 35 and e[t:t + 5].max() - gap >= 35:
             count += 1
     return count
+
+
+def click_rate(x: np.ndarray, speech_mask: np.ndarray) -> float | None:
+    """Line static / crackle detector: impulsive high-frequency (>3 kHz) events per minute of non-speech.
+    Each 2 ms window is compared with a running median (~100 ms); jumps of >12 dB in non-speech regions
+    count as clicks. Clean calls measured <=35/min, the static call 180/min, synthetic static 940+/min.
+    Deterministic and codec-stable, unlike the audio LLM's judgement of faint static."""
+    win = 32  # 2 ms at 16 kHz
+    sos = signal.butter(4, 3000, "hp", fs=SR, output="sos")
+    hp = signal.sosfilt(sos, x)
+    n = len(hp) // win
+    if n < 200:
+        return None
+    e = 10 * np.log10(np.mean(hp[: n * win].reshape(n, win) ** 2, axis=1) + EPS)
+    nonspeech = ~np.repeat(speech_mask, HOP // win)[:n]
+    if len(nonspeech) < n:
+        nonspeech = np.pad(nonspeech, (0, n - len(nonspeech)), constant_values=True)
+    ns_minutes = nonspeech.mean() * len(x) / SR / 60
+    if ns_minutes < 2 / 60:  # under ~2 s of non-speech: not enough evidence
+        return None
+    jumps = (e - signal.medfilt(e, 51) > 12) & nonspeech
+    events = int((np.diff(np.concatenate([[0], jumps.astype(np.int8), [0]])) == 1).sum())
+    return events / ns_minutes

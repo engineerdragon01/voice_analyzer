@@ -96,14 +96,24 @@ def load(path: str | Path) -> Audio:
     )
 
 
-def encode_for_api(mono: np.ndarray, bitrate: str = "32k") -> bytes:
-    """Compress 16 kHz mono float audio to Ogg/Opus to cut upload size (token cost is duration-based)."""
+INLINE_LIMIT_BYTES = 15 * 1024 * 1024  # Gemini inline requests are capped at 20 MB
+
+
+def encode_for_api(mono: np.ndarray) -> tuple[bytes, str]:
+    """Encode 16 kHz mono audio for the API. Lossless FLAC by default: token cost depends only on
+    duration, and re-encoding already-compressed calls with a lossy codec adds artifacts that the
+    model can mistake for line static (and that differ between libopus builds). Falls back to
+    Opus only when FLAC would exceed the inline request size (roughly > 30 min of audio)."""
     pcm = np.clip(mono, -1, 1).astype(np.float32).tobytes()
-    r = subprocess.run(
-        ["ffmpeg", "-v", "error", "-f", "f32le", "-ar", str(SR), "-ac", "1", "-i", "-",
-         "-c:a", "libopus", "-b:a", bitrate, "-application", "voip", "-f", "ogg", "-"],
-        input=pcm, capture_output=True, timeout=300,
-    )
-    if r.returncode != 0:
-        raise AudioError(f"encode failed ({r.stderr.decode(errors='ignore')[:200]})")
-    return r.stdout
+
+    def run(args: list[str]) -> bytes:
+        r = subprocess.run(["ffmpeg", "-v", "error", "-f", "f32le", "-ar", str(SR), "-ac", "1", "-i", "-",
+                            *args, "-"], input=pcm, capture_output=True, timeout=300)
+        if r.returncode != 0:
+            raise AudioError(f"encode failed ({r.stderr.decode(errors='ignore')[:200]})")
+        return r.stdout
+
+    data = run(["-c:a", "flac", "-sample_fmt", "s16", "-f", "flac"])
+    if len(data) <= INLINE_LIMIT_BYTES:
+        return data, "audio/flac"
+    return run(["-c:a", "libopus", "-b:a", "48k", "-f", "ogg"]), "audio/ogg"
