@@ -18,7 +18,7 @@
     "name": "call_002.ogg",
     "result_json": {
       "emotional_tone": "neutral",
-      "emotional_intensity": "medium",
+      "emotional_intensity": "low",
       "background_noise_present": true,
       "background_noise_type": "steady background noise",
       "background_noise_severity": "low",
@@ -36,11 +36,11 @@
       "emotional_intensity": "medium",
       "background_noise_present": true,
       "background_noise_type": "sharp static",
-      "background_noise_severity": "low",
+      "background_noise_severity": "medium",
       "audio_quality": "clear",
       "speaker_overlap_present": false,
       "long_silence_present": false,
-      "confidence": 0.84
+      "confidence": 0.75
     },
     "error": null
   }

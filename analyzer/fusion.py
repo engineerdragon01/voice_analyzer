@@ -38,6 +38,14 @@ def _norm_noise_type(t: str) -> str:
 
 
 STEADY_NOISE_SNR_DB = 30  # real calls: TV call 25.6 dB vs clean calls 44-45 dB; 0 FPs on synthetic set
+CLICK_RATE_STATIC = 90  # clicks per non-speech minute: clean calls <=35, static call 180, synthetic static 940+
+CLICK_RATE_SUPPORT = 60  # minimum measured click evidence before trusting an LLM claim of static
+_STATIC_WORDS = ("static", "crackl", "click", "pop", "line noise", "buzz", "interference")
+
+
+def _static_like(ntype: str) -> bool:
+    t = (ntype or "").lower()
+    return any(w in t for w in _STATIC_WORDS)
 
 
 def dsp_noise(features: dict) -> tuple[bool, str, str]:
@@ -46,8 +54,12 @@ def dsp_noise(features: dict) -> tuple[bool, str, str]:
     cannot see intermittent noise such as line static (the LLM covers that)."""
     snr = features["snr_db"]
     hum = (features.get("noise_hum_db") or 0) > 6
-    present = snr < STEADY_NOISE_SNR_DB or hum
-    if not present:
+    clicks = features.get("click_rate_per_min") or 0
+    steady = snr < STEADY_NOISE_SNR_DB or hum
+    if not steady and clicks >= CLICK_RATE_STATIC:
+        sev = "high" if clicks >= 600 else "medium" if clicks >= 150 else "low"
+        return True, "sharp static", sev
+    if not steady:
         return False, "", "none"
     sev = "high" if snr < 15 else "medium" if snr < 22 else "low"
     harm = features.get("noise_harmonicity") or 0
@@ -126,6 +138,11 @@ def fuse(candidates: list[dict], features: dict, cfg: Config, use_dsp_overrides:
             quality = "slightly_impaired"
         # Noise = LLM (intermittent sounds, voices, TV) OR DSP (steady noise the LLM under-reports).
         d_present, d_type, d_sev = dsp_noise(features)
+        # The audio LLM's judgement of faint static flips with the audio codec (observed between
+        # libopus builds and FLAC); require measured click evidence before accepting it.
+        clicks = features.get("click_rate_per_min")  # None when too little non-speech to measure
+        if noise_present and _static_like(ntype) and clicks is not None and clicks < CLICK_RATE_SUPPORT:
+            noise_present, ntype, sev = False, "", "none"
         sources_agree = d_present == noise_present
         if d_present and not noise_present:
             noise_present, ntype, sev = True, d_type, d_sev

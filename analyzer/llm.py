@@ -86,7 +86,7 @@ def cost_from_usage(cfg: Config, usage: dict) -> float:
 
 
 def classify(cfg: Config, audio_bytes: bytes, features: dict, samples: int,
-             compact: bool = False) -> tuple[list[dict], dict]:
+             compact: bool = False, mime_type: str = "audio/flac") -> tuple[list[dict], dict]:
     """Return (list of candidate label dicts, meta{usage, cost, latency, attempts})."""
     from google.genai import types
 
@@ -95,7 +95,7 @@ def classify(cfg: Config, audio_bytes: bytes, features: dict, samples: int,
     prompt = _prompt(version).replace("{dsp_summary}", dsp_summary(features))
     if compact:
         prompt = prompt[: prompt.rfind("OUTPUT")] + "OUTPUT\nReturn only the labels."
-    contents = [types.Part.from_bytes(data=audio_bytes, mime_type="audio/ogg"), prompt]
+    contents = [types.Part.from_bytes(data=audio_bytes, mime_type=mime_type), prompt]
 
     thinking = {"level": "minimal"}
 

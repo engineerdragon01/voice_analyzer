@@ -61,3 +61,13 @@ def test_stereo_split_overlap():
     f = dsp.features(np.stack([a, b], 1), (a + b) / 2)
     assert f["stereo_split"]
     assert 0.5 <= f["overlap_s"] <= 1.6
+
+
+def test_click_rate_flags_crackle_not_clean():
+    rng = np.random.default_rng(3)
+    clean = np.concatenate([tone(3), silence(6), tone(3)])
+    crackle = clean.copy()
+    idx = rng.integers(3 * 16000, 9 * 16000, 120)
+    crackle[idx] += rng.choice([-0.03, 0.03], len(idx))  # impulses well below speech level
+    assert (feats(clean)["click_rate_per_min"] or 0) < 90
+    assert feats(crackle)["click_rate_per_min"] > 90
