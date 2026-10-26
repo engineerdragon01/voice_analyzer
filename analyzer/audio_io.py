@@ -17,6 +17,15 @@ class AudioError(Exception):
     pass
 
 
+def _clean(stderr: str, path: Path) -> str:
+    """ffmpeg messages without server paths or memory addresses, truncated."""
+    import re
+
+    msg = stderr.replace(str(path), path.name).replace(str(path.parent) + "/", "")
+    msg = re.sub(r"\[[\w-]+ @ 0x[0-9a-f]+\] ?", "", msg)
+    return " ".join(msg.split())[:200]
+
+
 @dataclass
 class Audio:
     path: Path
@@ -41,7 +50,7 @@ def probe(path: Path) -> dict:
     except subprocess.TimeoutExpired as e:
         raise AudioError("ffprobe timed out") from e
     if r.returncode != 0:
-        raise AudioError(f"unreadable or corrupt audio ({r.stderr.strip()[:200] or 'ffprobe failed'})")
+        raise AudioError(f"unreadable or corrupt audio ({_clean(r.stderr, path) or 'ffprobe failed'})")
     info = json.loads(r.stdout or "{}")
     streams = [s for s in info.get("streams", []) if s.get("codec_type") == "audio"]
     if not streams:
@@ -71,7 +80,7 @@ def load(path: str | Path) -> Audio:
     except subprocess.TimeoutExpired as e:
         raise AudioError("decode timed out") from e
     if r.returncode != 0 or not r.stdout:
-        raise AudioError(f"decode failed ({r.stderr.decode(errors='ignore').strip()[:200]})")
+        raise AudioError(f"decode failed ({_clean(r.stderr.decode(errors='ignore'), path)})")
     x = np.frombuffer(r.stdout, dtype=np.float32)
     x = x[: len(x) // 2 * 2].reshape(-1, 2).copy()
     if len(x) < SR * 0.5:

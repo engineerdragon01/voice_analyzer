@@ -59,9 +59,9 @@ def dsp_only(features: dict, cfg: Config) -> dict:
         else:
             ntype = "background noise"
     quality = "clear"
-    if features["clipping_frac"] > 0.01 or features["dropouts"] >= 3 or features["rms_dbfs"] < -45:
+    if features["clipping_suspected"] or features["rms_dbfs"] < -45:
         quality = "slightly_impaired"
-    if features["clipping_frac"] > 0.05 or features["dropouts"] >= 15 or snr < 6:
+    if (features["clipping_suspected"] and (features.get("speech_kurtosis") or 9) < 2.0) or snr < 6:
         quality = "severely_impaired"
     overlap = bool(features.get("stereo_split") and features.get("overlap_s", 0) >= 1.5)
     return coerce({
@@ -111,12 +111,10 @@ def fuse(candidates: list[dict], features: dict, cfg: Config, use_dsp_overrides:
             overlap = features.get("overlap_s", 0) >= 1.5 and features.get("overlap_longest_s", 0) >= 0.5
         else:
             overlap = overlap_llm
-        # Technical impairments the model may under-hear.
-        if features["clipping_frac"] > 0.01 or features["dropouts"] >= 3:
-            if quality == "clear":
-                quality = "slightly_impaired"
-        if features["clipping_frac"] > 0.05 or features["dropouts"] >= 15:
-            quality = "severely_impaired"
+        # Technical impairments the model may under-hear. Dropout counts are not used here: they
+        # are unreliable after lossy coding and fire on line static (labeled as noise, not quality).
+        if (features["clipping_suspected"] or features["rms_dbfs"] < -45) and quality == "clear":
+            quality = "slightly_impaired"
     else:
         long_silence, overlap = silence_llm, overlap_llm
 

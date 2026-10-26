@@ -37,7 +37,8 @@ def test_budget_guard_never_exceeds_ceiling():
 
 def test_fusion_majority_and_tiebreak():
     cfg = Config()
-    feats = {"longest_interior_gap_s": 2.0, "clipping_frac": 0, "dropouts": 0, "stereo_split": False}
+    feats = {"longest_interior_gap_s": 2.0, "clipping_frac": 0, "dropouts": 0, "stereo_split": False,
+             "clipping_suspected": False, "rms_dbfs": -20}
     c = [{"emotional_tone": "upset", "emotional_intensity": "high", "background_noise_present": True,
           "background_noise_type": "television", "background_noise_severity": "medium"},
          {"emotional_tone": "frustrated", "emotional_intensity": "medium", "background_noise_present": True,

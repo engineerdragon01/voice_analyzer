@@ -45,8 +45,9 @@ def dsp_summary(f: dict) -> str:
         f"(leading {f['leading_silence_s']:.1f}s, trailing {f['trailing_silence_s']:.1f}s).",
         f"- Speech-to-background level ratio (SNR): {f['snr_db']:.0f} dB "
         f"(>35 dB is a very quiet background; <20 dB means a loud background).",
-        f"- Peak clipping: {f['clipping_frac']*100:.2f}% of samples; digital dropouts: {f['dropouts']}; "
-        f"overall level {f['rms_dbfs']:.0f} dBFS.",
+        f"- Clipping {'SUSPECTED' if f['clipping_suspected'] else 'not detected'}; "
+        f"possible brief dropouts: {f['dropouts']} (unreliable on compressed audio); "
+        f"overall level {f['rms_dbfs']:.0f} dBFS{' (very quiet)' if f['rms_dbfs'] < -45 else ''}.",
     ]
     if f.get("stereo_split"):
         lines.append(f"- Separate speaker channels: simultaneous speech {f['overlap_s']:.1f}s in "

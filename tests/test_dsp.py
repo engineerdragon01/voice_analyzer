@@ -35,7 +35,8 @@ def test_snr_drops_with_noise():
 
 def test_clipping_detected():
     x = np.clip(tone(5, amp=3.0), -1, 1)
-    assert feats(x)["clipping_frac"] > 0.05
+    f = feats(x)
+    assert f["clipping_frac"] > 0.05 and f["clipping_suspected"]
 
 
 def test_dropouts_detected():
