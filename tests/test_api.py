@@ -130,3 +130,54 @@ def test_delete_refused_while_processing(client, tmp_path):
 
 def test_delete_requires_login(client):
     assert client.delete("/api/batches/anything").status_code == 401
+
+
+def test_audio_budget_serializes_long_files():
+    import app.main as m
+    b = m._AudioBudget(10)
+    first = b.acquire(8)
+    import threading as th
+    got = []
+    t = th.Thread(target=lambda: got.append(b.acquire(5)))
+    t.start(); t.join(0.2)
+    assert not got  # 8 + 5 > 10: second file waits
+    b.release(first); t.join(1)
+    assert got == [300]  # reservations are whole seconds
+    big = m._AudioBudget(10)
+    assert big.acquire(40) == 600  # longer than the budget: admitted alone, capped reservation
+
+
+def test_audio_budget_no_float_residue_deadlock():
+    """Regression: with float minutes, interleaved acquire/release could leave a tiny positive residue, so
+    a budget-sized file (which needs used == 0) waited forever. Integer seconds must return exactly to 0."""
+    import threading as th
+    import app.main as m
+    b = m._AudioBudget(20)
+    held = {d: b.acquire(d) for d in (11.4766, 2.8655, 0.5824, 0.5157)}
+    for d in (2.8655, 11.4766, 0.5824, 0.5157):
+        b.release(held[d])
+    assert b.used == 0
+    got = []
+    t = th.Thread(target=lambda: got.append(b.acquire(34.4)), daemon=True)
+    t.start(); t.join(1)
+    assert got == [1200]  # a budget-sized file is admitted once everything is released
+
+
+def test_restart_guard_fails_crash_looping_file(tmp_path, monkeypatch):
+    """A file that was mid-analysis during two restarts is failed instead of re-queued forever."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "app"))
+    monkeypatch.setenv("DASH_PASS", "p")
+    import app.main as m
+    importlib.reload(m)
+    with TestClient(m.app) as c:
+        c.post("/api/login", data={"username": "autoace", "password": "p"})
+        a = write_wav(tmp_path / "x.wav", tone(2)).read_bytes()
+        bid = c.post("/api/batches", files=[("files", ("x.wav", a, "audio/wav"))]).json()["batch_id"]
+        m.store.set_file(bid, "x.wav", status="processing")
+    for expected in ("processing", "error"):  # 1st restart: retried; 2nd: given up
+        m.store.set_file(bid, "x.wav", status="processing")  # simulate a crash mid-analysis
+        monkeypatch.setattr(m.executor, "submit", lambda *a, **k: None)
+        with TestClient(m.app):
+            f = m.store.get_files(bid)[0]
+        assert f["status"] == expected, f
+    assert "restarted" in f["error"]

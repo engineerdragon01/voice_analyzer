@@ -17,7 +17,7 @@ def analyze_file(path: str | Path, cfg: Config | None = None) -> tuple[dict, dic
     t_decode = time.time() - t0
 
     t1 = time.time()
-    feats = dsp.features(audio.stereo, audio.mono)
+    feats = dsp.features_for(audio)
     t_dsp = time.time() - t1
 
     meta: dict = {

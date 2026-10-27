@@ -70,7 +70,9 @@ python -m eval.synthetic score data/synthetic/labels.csv results/synthetic_hybri
 | `DASH_USER` / `DASH_PASS` | `autoace` / – | Dashboard login (login disabled until `DASH_PASS` is set) |
 | `SESSION_SECRET` | random | Cookie signing key (set it so sessions survive restarts) |
 | `DATA_DIR` | `./data/app` | SQLite DB + temporary uploads |
-| `WORKERS` | `4` | Concurrent files |
+| `WORKERS` | `4` | Concurrent files (short calls) |
+| `AUDIO_MINUTES_BUDGET` | `15` | Audio-minutes analyzed at once; long files queue instead of exhausting RAM |
+| `MAX_AUDIO_MINUTES` | `15` | Longer files are rejected with a clear error (sized for a 512 MB instance; raise on bigger ones) |
 | `KEEP_AUDIO` | `0` | Uploaded audio is deleted after analysis unless set |
 | `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` | – | Use Vertex AI so audio stays in AutoAce's GCP project |
 

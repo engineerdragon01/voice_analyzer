@@ -148,6 +148,14 @@ API rate limit; running a clip's samples concurrently would cut long-clip latenc
 
 ## 6. Production design
 
+- **Memory on a 512 MB instance:** audio is decoded as a stream (mono mix and channel statistics built on the
+  fly; stereo kept only for genuinely split channels) and every DSP statistic is computed in 30 s chunks. Peak
+  memory fell from ~45 to ~10–15 MB per audio-minute with byte-identical features and API audio. Files reserve
+  their duration against a shared audio-minute budget (default 15), so short calls run 4-wide while long ones
+  queue; `MALLOC_ARENA_MAX=2` and a post-file `malloc_trim` return memory between files. Measured worst case
+  (four 11.5-min calls + a 14.5-min call + the three provided calls): **343 MB peak**, back to 130 MB idle.
+  Files over 15 min are rejected with a clear message (configurable), and a file that was mid-analysis during two
+  restarts is failed rather than retried, so a single file can never crash-loop the service.
 - **Batch handling:** folder or ZIP upload (a wrapper folder is fine, `__MACOSX` is ignored, path traversal and zip
   bombs are rejected); manifest validation before processing (missing audio, unlisted audio, unsupported files,
   malformed labels); per-file isolation with retries and timeouts, and permanent API errors fail fast; live progress
@@ -158,8 +166,8 @@ API rate limit; running a clip's samples concurrently would cut long-clip latenc
   fixed seeds; lossless audio to the API; the CLI shares the web code path (`analyzer/pipeline.py`);
   `eval/experiments.py` regenerates every table; `eval/refuse.py` re-scores fusion changes from stored model
   outputs without API calls.
-- **Verification:** 28 pytest cases (DSP on synthetic signals, schema, manifest, budget guard, fusion, API end to
-  end with a corrupt file, unmatched rows, a ZIP traversal attempt, and batch deletion), plus Playwright browser tests run against
+- **Verification:** 31 pytest cases (DSP on synthetic signals, schema, manifest, budget guard, fusion, API end to
+  end with a corrupt file, unmatched rows, a ZIP traversal attempt, batch deletion, the memory budget and the restart guard), plus Playwright browser tests run against
   both a local server and the hosted Render deployment.
 
 ## 7. Data handling and external API disclosure

@@ -29,7 +29,7 @@ def refuse(meta_path: str, audio_dir: str | None = None) -> dict[str, dict]:
         feats = m["features"]
         if audio_dir:
             a = audio_io.load(Path(audio_dir) / r["name"])
-            feats = dsp.features(a.stereo, a.mono)
+            feats = dsp.features_for(a)
         out[r["name"]], _ = fusion.fuse(m["candidates"], feats, cfg)
     return out
 

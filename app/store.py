@@ -28,6 +28,9 @@ def init(db_path: Path) -> None:
     _conn.row_factory = sqlite3.Row
     _conn.execute("PRAGMA journal_mode=WAL")
     _conn.executescript(SCHEMA)
+    cols = {r["name"] for r in _conn.execute("PRAGMA table_info(files)")}
+    if "restarts" not in cols:  # migrate databases created before the crash-loop guard
+        _conn.execute("ALTER TABLE files ADD COLUMN restarts INTEGER DEFAULT 0")
     _conn.commit()
 
 
@@ -100,6 +103,9 @@ def delete_batch(batch_id: str) -> bool:
     return True
 
 
-def interrupted() -> list[tuple[str, str]]:
-    rows = _q("SELECT batch_id, name FROM files WHERE status IN ('queued','processing')")
-    return [(r["batch_id"], r["name"]) for r in rows]
+def interrupted() -> list[dict]:
+    """Files left unfinished by a restart. A file that was mid-analysis gets its restart count bumped."""
+    _q("UPDATE files SET restarts = COALESCE(restarts, 0) + 1 WHERE status = 'processing'")
+    rows = _q("SELECT batch_id, name, status, COALESCE(restarts, 0) AS restarts FROM files "
+              "WHERE status IN ('queued','processing')")
+    return [dict(r) for r in rows]
