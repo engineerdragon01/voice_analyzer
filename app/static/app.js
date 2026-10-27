@@ -184,20 +184,21 @@ async function poll() {
 function renderMetrics(m) {
   if (!m) { $("metrics").innerHTML = ""; return; }
   const rows = Object.entries(m.fields).map(([f, v]) =>
-    `<tr><td>${esc(f)}</td><td>${v.accuracy.toFixed(3)}</td><td>${v.macro_f1.toFixed(3)}</td></tr>`).join("");
+    `<tr><td>${esc(f)}</td><td>${v.n ?? m.n}</td><td>${v.accuracy.toFixed(3)}</td><td>${v.macro_f1.toFixed(3)}</td></tr>`).join("");
+  const fx = (v) => (v == null ? "–" : v.toFixed(3));
   const cls = m.tone_confusion.classes;
   const cm = m.tone_confusion.matrix.map((row, i) =>
     `<tr><th>${cls[i]}</th>${row.map((x, j) => `<td class="${i === j ? "diag" : ""}">${x}</td>`).join("")}</tr>`).join("");
   $("metrics").innerHTML = `
     <details open><summary>Accuracy vs. provided labels (n=${m.n})</summary>
       <div class="stats">
-        <div class="stat"><div class="v">${m.tone_accuracy.toFixed(3)}</div><div class="k">Tone accuracy</div></div>
-        <div class="stat"><div class="v">${m.tone_macro_f1.toFixed(3)}</div><div class="k">Tone macro-F1</div></div>
-        <div class="stat"><div class="v">${m.mean_field_accuracy.toFixed(3)}</div><div class="k">Mean field accuracy</div></div>
-        <div class="stat"><div class="v">${m.tone_brier.toFixed(3)}</div><div class="k">Tone Brier (conf.)</div></div>
+        <div class="stat"><div class="v">${fx(m.tone_accuracy)}</div><div class="k">Tone accuracy</div></div>
+        <div class="stat"><div class="v">${fx(m.tone_macro_f1)}</div><div class="k">Tone macro-F1</div></div>
+        <div class="stat"><div class="v">${fx(m.mean_field_accuracy)}</div><div class="k">Mean field accuracy</div></div>
+        <div class="stat"><div class="v">${fx(m.tone_brier)}</div><div class="k">Tone Brier (conf.)</div></div>
       </div>
       <div class="row" style="align-items:flex-start;gap:24px">
-        <div class="table-wrap"><table><tr><th>Field</th><th>Accuracy</th><th>Macro-F1</th></tr>${rows}</table></div>
+        <div class="table-wrap"><table><tr><th>Field</th><th>Labeled</th><th>Accuracy</th><th>Macro-F1</th></tr>${rows}</table></div>
         <div class="table-wrap"><table class="cm"><tr><th>label ↓ / pred →</th>${cls.map((c) => `<th>${c}</th>`).join("")}</tr>${cm}</table></div>
       </div>
     </details>`;

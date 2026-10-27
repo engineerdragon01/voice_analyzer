@@ -42,42 +42,56 @@ def confusion(y_true: list, y_pred: list, classes: list) -> list[list[int]]:
 
 
 def score(pairs: list[tuple[dict, dict]]) -> dict:
-    """pairs = [(label, prediction)]. Labels are coerced the same way as predictions."""
+    """pairs = [(label, prediction)]. Each field is scored only over labels that actually contain it
+    (a partial result_json is not penalized for fields it omits). Label values are coerced like predictions."""
     if not pairs:
         return {"n": 0}
-    labels = [coerce(l) for l, _ in pairs]
+    raw = [l for l, _ in pairs]
+    labels = [coerce(l) for l in raw]
     preds = [coerce(p) for _, p in pairs]
     out: dict = {"n": len(pairs), "fields": {}}
     for f in SCORED_FIELDS:
-        yt = [l[f] for l in labels]
-        yp = [p[f] for p in preds]
+        idx = [i for i, r in enumerate(raw) if f in r]
+        if not idx:
+            continue
+        yt = [labels[i][f] for i in idx]
+        yp = [preds[i][f] for i in idx]
         acc = sum(1 for a, b in zip(yt, yp) if a == b) / len(yt)
         classes = ENUMS[f] if f in ENUMS else [False, True]
         mf1, per = macro_f1(yt, yp, classes)
-        out["fields"][f] = {"accuracy": round(acc, 3), "macro_f1": mf1, "per_class": {str(k): v for k, v in per.items()}}
-    yt = [l["emotional_tone"] for l in labels]
-    yp = [p["emotional_tone"] for p in preds]
+        out["fields"][f] = {"n": len(idx), "accuracy": round(acc, 3), "macro_f1": mf1,
+                            "per_class": {str(k): v for k, v in per.items()}}
+    tone_idx = [i for i, r in enumerate(raw) if "emotional_tone" in r]
+    yt = [labels[i]["emotional_tone"] for i in tone_idx]
+    yp = [preds[i]["emotional_tone"] for i in tone_idx]
     out["tone_confusion"] = {"classes": TONES, "matrix": confusion(yt, yp, TONES)}
-    exact = [all(l[f] == p[f] for f in SCORED_FIELDS) for l, p in zip(labels, preds)]
+    exact = [all(labels[i][f] == preds[i][f] for f in SCORED_FIELDS if f in raw[i]) for i in range(len(raw))]
     out["all_fields_exact"] = round(sum(exact) / len(exact), 3)
-    out["mean_field_accuracy"] = round(sum(v["accuracy"] for v in out["fields"].values()) / len(SCORED_FIELDS), 3)
-    # Calibration: Brier score of confidence vs. "tone correct".
-    correct = [1.0 if l["emotional_tone"] == p["emotional_tone"] else 0.0 for l, p in zip(labels, preds)]
-    conf = [p["confidence"] for p in preds]
-    out["tone_brier"] = round(sum((c - y) ** 2 for c, y in zip(conf, correct)) / len(conf), 3)
-    out["mean_confidence"] = round(sum(conf) / len(conf), 3)
-    out["tone_accuracy"] = out["fields"]["emotional_tone"]["accuracy"]
-    out["tone_macro_f1"] = out["fields"]["emotional_tone"]["macro_f1"]
+    accs = [v["accuracy"] for v in out["fields"].values()]
+    out["mean_field_accuracy"] = round(sum(accs) / len(accs), 3) if accs else None
+    conf = [preds[i]["confidence"] for i in tone_idx]
+    if tone_idx:
+        # Calibration: Brier score of confidence vs. "tone correct".
+        correct = [1.0 if a == b else 0.0 for a, b in zip(yt, yp)]
+        out["tone_brier"] = round(sum((c - y) ** 2 for c, y in zip(conf, correct)) / len(conf), 3)
+        out["mean_confidence"] = round(sum(conf) / len(conf), 3)
+        out["tone_accuracy"] = out["fields"]["emotional_tone"]["accuracy"]
+        out["tone_macro_f1"] = out["fields"]["emotional_tone"]["macro_f1"]
+    else:
+        out["tone_brier"] = out["mean_confidence"] = out["tone_accuracy"] = out["tone_macro_f1"] = None
     return out
 
 
 def to_markdown(s: dict, title: str = "Results") -> str:
     if not s.get("n"):
         return f"## {title}\n\nNo labeled items.\n"
+    def fmt(v, spec=".3f"):
+        return "n/a" if v is None else format(v, spec)
+
     lines = [f"## {title}", "", f"n = {s['n']} labeled clips", "",
-             f"- Tone accuracy: **{s['tone_accuracy']:.3f}**, tone macro-F1: **{s['tone_macro_f1']:.3f}**",
-             f"- Mean per-field accuracy: {s['mean_field_accuracy']:.3f}; all-fields-exact: {s['all_fields_exact']:.3f}",
-             f"- Confidence: mean {s['mean_confidence']:.2f}, tone Brier {s['tone_brier']:.3f}", "",
+             f"- Tone accuracy: **{fmt(s['tone_accuracy'])}**, tone macro-F1: **{fmt(s['tone_macro_f1'])}**",
+             f"- Mean per-field accuracy: {fmt(s['mean_field_accuracy'])}; all-fields-exact: {s['all_fields_exact']:.3f}",
+             f"- Confidence: mean {fmt(s['mean_confidence'], '.2f')}, tone Brier {fmt(s['tone_brier'])}", "",
              "| Field | Accuracy | Macro-F1 |", "|---|---|---|"]
     for f, v in s["fields"].items():
         lines.append(f"| {f} | {v['accuracy']:.3f} | {v['macro_f1']:.3f} |")

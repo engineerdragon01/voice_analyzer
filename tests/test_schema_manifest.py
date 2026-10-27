@@ -57,3 +57,18 @@ def test_no_manifest_processes_all(tmp_path, make_wav):
     make_wav("a.wav", tone(1))
     p = plan_batch(tmp_path)
     assert p.to_process == ["a.wav"] and p.warnings
+
+
+def test_metrics_score_only_fields_present_in_labels():
+    from analyzer.metrics import score
+    full = {"emotional_tone": "upset", "emotional_intensity": "high", "background_noise_present": False,
+            "background_noise_severity": "none", "audio_quality": "clear", "speaker_overlap_present": False,
+            "long_silence_present": False}
+    pred = dict(full, emotional_intensity="medium")
+    partial = {"emotional_tone": "upset"}  # e.g. a hand-written label with one field
+    s = score([(full, pred), (partial, {"emotional_tone": "upset", "emotional_intensity": "low"})])
+    assert s["fields"]["emotional_tone"] == {**s["fields"]["emotional_tone"], "n": 2, "accuracy": 1.0}
+    assert s["fields"]["emotional_intensity"]["n"] == 1  # partial label not scored on intensity
+    assert s["fields"]["emotional_intensity"]["accuracy"] == 0.0
+    no_tone = score([({"long_silence_present": True}, {"long_silence_present": True})])
+    assert no_tone["tone_accuracy"] is None and no_tone["mean_field_accuracy"] == 1.0
