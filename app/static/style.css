@@ -44,6 +44,18 @@ td.wrap { white-space: normal; min-width: 220px; }
 .stat .k { color: var(--muted); font-size: 12px; }
 ul.report { margin: 6px 0; padding-left: 18px; }
 details summary { cursor: pointer; color: var(--accent); }
+button.link { background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-align: left; }
+tr.detail-row > td { white-space: normal; background: var(--bg); padding: 12px 14px 16px; }
+/* The results table can scroll sideways on narrow screens; keep the details pinned to the visible width. */
+.detail-inner { position: sticky; left: 14px; max-width: calc(100vw - 72px); }
+/* Column flow: cards stack top-to-bottom per column, so a tall card leaves no gaps beside shorter ones. */
+.det-grid { columns: 3 300px; column-gap: 12px; margin: 10px 0; }
+.det-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; break-inside: avoid; margin-bottom: 12px; }
+.det-card h3 { font-size: 13px; margin: 0 0 8px; }
+.ev { margin-bottom: 8px; line-height: 1.45; }
+table.kv { width: 100%; font-size: 12px; }
+table.kv th, table.kv td { white-space: normal; padding: 3px 6px; border-bottom: 1px solid var(--border); word-break: break-word; }
+table.kv th { width: 55%; color: var(--muted); font-weight: 500; }
 pre { font-family: var(--mono); font-size: 12px; background: var(--chip); padding: 10px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; }
 .cm td, .cm th { text-align: center; }
 .cm td.diag { font-weight: 700; }
