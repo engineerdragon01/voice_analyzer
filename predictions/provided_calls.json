@@ -1,0 +1,47 @@
+[
+  {
+    "name": "call_001.ogg",
+    "result_json": {
+      "emotional_tone": "frustrated",
+      "emotional_intensity": "medium",
+      "background_noise_present": false,
+      "background_noise_type": "",
+      "background_noise_severity": "none",
+      "audio_quality": "clear",
+      "speaker_overlap_present": false,
+      "long_silence_present": false,
+      "confidence": 0.72
+    },
+    "error": null
+  },
+  {
+    "name": "call_002.ogg",
+    "result_json": {
+      "emotional_tone": "neutral",
+      "emotional_intensity": "low",
+      "background_noise_present": true,
+      "background_noise_type": "steady background noise",
+      "background_noise_severity": "low",
+      "audio_quality": "clear",
+      "speaker_overlap_present": false,
+      "long_silence_present": false,
+      "confidence": 0.6
+    },
+    "error": null
+  },
+  {
+    "name": "call_003.ogg",
+    "result_json": {
+      "emotional_tone": "neutral",
+      "emotional_intensity": "medium",
+      "background_noise_present": true,
+      "background_noise_type": "sharp static",
+      "background_noise_severity": "medium",
+      "audio_quality": "clear",
+      "speaker_overlap_present": false,
+      "long_silence_present": false,
+      "confidence": 0.75
+    },
+    "error": null
+  }
+]

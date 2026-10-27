@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: autoace-voice-analyzer
+    runtime: docker
+    plan: starter
+    healthCheckPath: /healthz
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DASH_USER
+        value: autoace
+      - key: DASH_PASS
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: WORKERS
+        value: "4"

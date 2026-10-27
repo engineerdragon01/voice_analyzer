@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AutoAce Voice Analyzer</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div><h1>AutoAce Voice Analyzer</h1><div class="meta" id="cfg">loading…</div></div>
+  <div class="row"><button id="historyBtn">Batches</button><button id="logout">Sign out</button></div>
+</header>
+<main>
+  <section class="panel" id="uploadPanel">
+    <h2>1 · Upload an evaluation batch</h2>
+    <p class="muted small">A folder or ZIP with audio files at its root plus one CSV manifest (<code>name,result_json</code>).
+      Supported: wav, mp3, ogg, opus, m4a, mp4, aac, flac, webm, wma, amr. If <code>result_json</code> labels are included, accuracy is computed automatically.</p>
+    <div class="drop" id="drop">
+      <p>Drag a folder or ZIP here</p>
+      <div class="row" style="justify-content:center">
+        <label class="btn">Choose folder<input id="folderInput" type="file" webkitdirectory directory multiple hidden></label>
+        <label class="btn">Choose ZIP / files<input id="fileInput" type="file" multiple accept=".zip,.csv,audio/*,.ogg,.opus,.m4a,.amr,.wma" hidden></label>
+      </div>
+      <p id="picked" class="small"></p>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <input id="label" type="text" placeholder="Batch label (optional)" style="max-width:320px">
+      <button class="primary" id="uploadBtn" disabled>Upload &amp; validate</button>
+      <span id="uploadMsg" class="small"></span>
+    </div>
+    <div class="progress hidden" id="upProg"><div></div></div>
+  </section>
+
+  <section class="panel hidden" id="validatePanel">
+    <h2>2 · Validation</h2>
+    <div id="report"></div>
+    <div class="row" style="margin-top:12px">
+      <label class="small muted" for="backend">Backend</label>
+      <select id="backend" style="max-width:260px">
+        <option value="hybrid">Hybrid (DSP + Gemini) — recommended</option>
+        <option value="gemini">Gemini only (ablation)</option>
+        <option value="dsp">DSP rules only (no API, $0)</option>
+      </select>
+      <button class="primary" id="runBtn">Run analysis</button>
+      <span id="runMsg" class="small"></span>
+    </div>
+  </section>
+
+  <section class="panel hidden" id="resultsPanel">
+    <div class="row" style="justify-content:space-between">
+      <h2 id="resultsTitle">3 · Results</h2>
+      <div class="row">
+        <button id="cancelBtn">Cancel remaining</button>
+        <button id="deleteBtn" class="hidden">Delete batch</button>
+        <a class="btn" id="dlCsv">Download CSV</a>
+        <a class="btn" id="dlJson">Download JSON</a>
+      </div>
+    </div>
+    <div class="progress"><div id="bar"></div></div>
+    <div id="progressText" class="small muted"></div>
+    <div class="stats" id="stats"></div>
+    <div id="metrics"></div>
+    <div class="table-wrap"><table id="tbl"></table></div>
+  </section>
+
+  <section class="panel hidden" id="historyPanel">
+    <h2>Previous batches</h2>
+    <div class="table-wrap"><table id="hist"></table></div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
