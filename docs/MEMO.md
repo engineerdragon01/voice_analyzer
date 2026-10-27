@@ -69,6 +69,15 @@ and shown in the dashboard whenever a batch includes labels.
 | background_noise_present | 1.00 | | long_silence_present | 1.00 |
 | background_noise_severity | 0.67 | | | |
 
+Per-class tone performance (classes that occur in labels or predictions):
+
+| Class | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| neutral | 0.50 | 1.00 | 0.67 | 1 |
+| satisfied | 0.00 | 0.00 | 0.00 | 1 |
+| frustrated | 0.00 | — | 0.00 | 0 (predicted once) |
+| upset | — | 0.00 | 0.00 | 1 |
+
 Tone confusion matrix (rows = label, columns = prediction):
 
 | label \ pred | neutral | satisfied | frustrated | upset | distressed |
@@ -145,6 +154,12 @@ Per file, time splits ~11% decode, ~5% DSP, ~75% Gemini request(s), the rest FLA
 1.8–2.6 s per file, max ~8 s (the 172 s call with k = 3 sequential samples). That is ≈ 3.3 s of processing per
 audio-minute per worker; 4 workers finished 29 audio-minutes in 24 s. Throughput scales with `WORKERS` up to the
 API rate limit; running a clip's samples concurrently would cut long-clip latency about 3×.
+
+**On the hosted Render Starter instance (0.5 CPU), measured:** the three provided calls (3.96 audio-min, run
+concurrently) finished in **14.6 s wall-clock, ≈ 16 audio-minutes per minute**; per file 8.7 s, 9.0 s and 14.4 s,
+of which decode + DSP (CPU-bound, shared across workers on 0.5 CPU) was 3.7–6.6 s and Gemini 2–7 s. Estimate for
+larger batches: the CPU-bound part costs ≈ 2 s per audio-minute on this instance, so a 100-audio-minute batch
+should take roughly 4–7 minutes. A 1–2 CPU instance roughly halves the CPU-bound part.
 
 ## 6. Production design
 
