@@ -34,17 +34,27 @@ hosted 0.5-CPU instance · 32 automated tests.
 
 ## 1. How it works
 
+```mermaid
+flowchart LR
+    A["Upload<br/>folder or ZIP"] --> B["Validate<br/>manifest"]
+    B --> C["Decode audio<br/>(per file)"]
+    C --> D["Signal measurements<br/>silence · noise · static · clipping"]
+    C --> E["Gemini 3.5 Flash-Lite<br/>tone · intensity · noise · overlap"]
+    D --> F["Fusion<br/>best source per field"]
+    E --> F
+    F --> G["Results<br/>table · CSV · JSON"]
 ```
-upload (folder or ZIP) ─► manifest validation ─► worker pool (per-file isolation, retries, timeouts, memory budget)
-  per file:
-    ffmpeg streaming decode (16 kHz) ─► DSP measurements (numpy/scipy)
-        speech/pause detection · long silence · SNR · mains hum · high-frequency click rate (line static)
-        clipping (speech kurtosis) · level · channel layout
-    lossless 16 kHz mono FLAC ─► Gemini 3.5 Flash-Lite
-        spec definitions + DSP evidence in the prompt · enum-constrained JSON · 1–3 independently seeded samples
-  ─► fusion: each field decided by the component that measured best on it
-  ─► schema validation ─► confidence ─► results table, CSV, JSON
-```
+
+| Stage | What happens |
+|---|---|
+| **1. Upload and validate** | Reads the folder or ZIP, matches audio files to the CSV manifest, and reports any problems before processing |
+| **2. Decode** | ffmpeg converts each file to 16 kHz audio; files run in parallel, each isolated, with retries and a memory budget |
+| **3a. Signal measurements** | Deterministic checks (numpy/scipy): speech vs pauses, long silence, background level (SNR), mains hum, line-static clicks, clipping, loudness |
+| **3b. Gemini** | Hears the call as lossless audio, with the spec's definitions and the measurements in the prompt; returns allowed values only; 1–3 independent samples per call depending on length |
+| **4. Fusion** | Each field comes from the component that measured best on it (table below); the output is validated against the schema and given a confidence score |
+| **5. Results** | Shown in the dashboard and downloadable as CSV or JSON |
+
+**Which component decides each field**
 
 | Field | Decided by |
 |---|---|
