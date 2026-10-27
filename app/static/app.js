@@ -7,6 +7,8 @@ const SHORT = { emotional_tone: "tone", emotional_intensity: "intensity", backgr
 let picked = [];      // [{file, path}]
 let batchId = null;
 let pollTimer = null;
+let lastFiles = [];
+const openDetails = new Set();  // file names whose detail row is expanded (survives re-renders while polling)
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -144,6 +146,7 @@ async function deleteBatch(id, label, total) {
 }
 
 function openBatch(id) {
+  if (id !== batchId) openDetails.clear();
   batchId = id;
   $("resultsPanel").classList.remove("hidden");
   $("dlCsv").href = `/api/batches/${id}/results.csv`;
@@ -216,21 +219,58 @@ function cell(f, p, label) {
   return `<td>${esc(shown)}</td>`;
 }
 
+function kvTable(obj) {
+  const fmt = (v) => (typeof v === "boolean" ? (v ? "yes" : "no") : v === null || v === "" ? "—" : v);
+  return `<table class="kv">${Object.entries(obj || {}).map(([k, v]) =>
+    `<tr><th>${esc(k.replace(/_/g, " "))}</th><td>${esc(fmt(v))}</td></tr>`).join("")}</table>`;
+}
+
+// Full-width detail row: readable sections instead of one JSON blob squeezed into the last column.
+function detailRow(f, colspan) {
+  const m = f.meta || {};
+  const facts = [`${m.duration_s}s audio`, `${m.total_s}s processing`, `$${(m.cost_usd || 0).toFixed(5)}`];
+  if (m.samples) facts.push(`${m.samples} model sample${m.samples > 1 ? "s" : ""}`);
+  if (m.model) facts.push(m.model);
+  const evidence = (m.evidence || []).map((e, i) =>
+    `<div class="ev"><span class="muted small">Sample ${i + 1}</span><br><b>Customer:</b> ${esc(e.customer || "—")}` +
+    `<br><b>Background:</b> ${esc(e.noise || "—")}</div>`).join("");
+  const raw = { evidence: m.evidence, diagnostics: m.diagnostics, features: m.features, label: f.label };
+  return `<tr class="detail-row"><td colspan="${colspan}"><div class="detail-inner">
+    <div class="small muted">${esc(facts.join(" · "))}</div>
+    <div class="det-grid">
+      ${evidence ? `<div class="det-card"><h3>Model evidence</h3>${evidence}</div>` : ""}
+      ${m.diagnostics ? `<div class="det-card"><h3>Decision diagnostics</h3>${kvTable(m.diagnostics)}</div>` : ""}
+      ${f.label ? `<div class="det-card"><h3>Provided label</h3>${kvTable(f.label)}</div>` : ""}
+      <div class="det-card"><h3>Signal measurements</h3>${kvTable(m.features)}</div>
+    </div>
+    <details><summary>Raw JSON</summary><pre>${esc(JSON.stringify(raw, null, 2))}</pre></details>
+  </div></td></tr>`;
+}
+
 function renderTable(files) {
+  lastFiles = files;
+  const colspan = FIELDS.length + 3;
   const head = `<tr><th>File</th><th>Status</th>${FIELDS.map((f) => `<th>${SHORT[f]}</th>`).join("")}<th>Details</th></tr>`;
   const body = files.map((f) => {
     const st = { done: "ok", error: "err", processing: "warn", queued: "", pending: "" }[f.status] || "";
     const meta = f.meta || {};
+    const open = f.status === "done" && openDetails.has(f.name);
     const det = f.status === "error"
       ? `<td class="wrap err">${esc(f.error)}</td>`
       : f.status === "done"
-        ? `<td class="wrap"><details><summary>${meta.duration_s}s · ${meta.total_s}s proc · $${(meta.cost_usd || 0).toFixed(5)}</summary>` +
-          `<pre>${esc(JSON.stringify({ evidence: meta.evidence, diagnostics: meta.diagnostics, features: meta.features, label: f.label }, null, 2))}</pre></details></td>`
+        ? `<td><button class="link det-toggle" data-name="${esc(f.name)}" aria-expanded="${open}">` +
+          `${open ? "▾" : "▸"} ${meta.duration_s}s · ${meta.total_s}s proc · $${(meta.cost_usd || 0).toFixed(5)}</button></td>`
         : "<td></td>";
     return `<tr><td>${esc(f.name)}</td><td><span class="chip ${st}">${f.status}</span></td>` +
-      FIELDS.map((k) => cell(k, f.prediction, f.label)).join("") + det + "</tr>";
+      FIELDS.map((k) => cell(k, f.prediction, f.label)).join("") + det + "</tr>" +
+      (open ? detailRow(f, colspan) : "");
   }).join("");
   $("tbl").innerHTML = head + body;
+  $("tbl").querySelectorAll("button.det-toggle").forEach((btn) => btn.onclick = () => {
+    const name = btn.dataset.name;
+    openDetails.has(name) ? openDetails.delete(name) : openDetails.add(name);
+    renderTable(lastFiles);
+  });
 }
 
 // ------------------------------------------------------------ history
