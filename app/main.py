@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from analyzer import metrics
+from analyzer import audio_io, metrics
 from analyzer.config import Config
 from analyzer.llm import available as llm_available
 from analyzer.manifest import plan_batch
@@ -37,6 +37,7 @@ SESSION_SECRET = os.getenv("SESSION_SECRET") or secrets.token_hex(32)
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_MB", "1024")) * 1024 * 1024
 WORKERS = int(os.getenv("WORKERS", "4"))
 KEEP_AUDIO = os.getenv("KEEP_AUDIO", "").lower() in ("1", "true")
+MAX_RESTARTS_PER_FILE = 2
 STATIC = Path(__file__).parent / "static"
 
 
@@ -44,8 +45,17 @@ STATIC = Path(__file__).parent / "static"
 @asynccontextmanager
 async def lifespan(_app):
     store.init(DATA_DIR / "app.db")
-    # Resume work interrupted by a restart (audio is still on disk for unfinished files).
-    for batch_id, name in store.interrupted():
+    # Resume work interrupted by a restart (audio is still on disk for unfinished files). A file that was
+    # being analyzed during two restarts is failed instead of retried, so one file that exhausts memory
+    # cannot crash-loop the service.
+    for f in store.interrupted():
+        batch_id, name = f["batch_id"], f["name"]
+        if f["restarts"] >= MAX_RESTARTS_PER_FILE:
+            store.set_file(batch_id, name, status="error", finished=time.time(),
+                           error="Server restarted while analyzing this file "
+                                 f"{f['restarts']} times (likely out of memory); skipped.")
+            _maybe_finish(batch_id)
+            continue
         b = store.get_batch(batch_id)
         c = Config()
         c.backend = (b or {}).get("config", {}).get("backend", c.backend)
@@ -203,18 +213,83 @@ def _batch_input_dir(batch_id: str) -> Path:
     return base / root if root else base
 
 
+class _AudioBudget:
+    """Admission control by audio length: peak memory is ~10 MB per audio-minute per file, so concurrent
+    files reserve their duration against a shared budget. Short calls still run WORKERS-wide; long ones
+    queue instead of exhausting a small instance's RAM. A file longer than the budget runs alone."""
+
+    def __init__(self, minutes: float) -> None:
+        # Whole seconds, not float minutes: float sums can leave a residue (e.g. 1e-15) after releases,
+        # so "used == 0" would never hold again and a budget-sized file would wait forever.
+        self.cap = max(1, int(minutes * 60))
+        self.used = 0
+        self.cond = threading.Condition()
+
+    def acquire(self, minutes: float) -> int:
+        need = min(max(int(round(minutes * 60)), 30), self.cap)
+        with self.cond:
+            self.cond.wait_for(lambda: self.used == 0 or self.used + need <= self.cap)
+            self.used += need
+        return need
+
+    def release(self, need: int) -> None:
+        with self.cond:
+            self.used -= need
+            self.cond.notify_all()
+
+
+# 15 audio-minutes in flight measured at ~290 MB peak on the server (with MALLOC_ARENA_MAX=2), which leaves
+# headroom on a 512 MB instance. Raise it on bigger instances.
+_budget = _AudioBudget(float(os.getenv("AUDIO_MINUTES_BUDGET", "15")))
+
+
+try:
+    import ctypes
+
+    _libc = ctypes.CDLL("libc.so.6")
+except OSError:  # non-glibc platforms
+    _libc = None
+
+
+def _release_memory() -> None:
+    """Return freed heap pages to the OS after each file (glibc otherwise keeps them per thread)."""
+    import gc
+
+    gc.collect()
+    if _libc is not None:
+        try:
+            _libc.malloc_trim(0)
+        except AttributeError:
+            pass
+
+
+def _duration_minutes(path: Path) -> float:
+    try:
+        return float(audio_io.probe(path)["format"].get("duration") or 0) / 60
+    except Exception:  # noqa: BLE001 — unreadable files fail properly inside analyze_file
+        return 0.5
+
+
 def _process(batch_id: str, name: str, cfg: Config) -> None:
     if batch_id in _cancel:
         store.set_file(batch_id, name, status="error", error="cancelled by user", finished=time.time())
         return
-    store.set_file(batch_id, name, status="processing", started=time.time())
     path = _batch_input_dir(batch_id) / name
+    reserved = _budget.acquire(_duration_minutes(path))
+    if batch_id in _cancel:  # cancelled while waiting for budget
+        _budget.release(reserved)
+        store.set_file(batch_id, name, status="error", error="cancelled by user", finished=time.time())
+        _maybe_finish(batch_id)
+        return
+    store.set_file(batch_id, name, status="processing", started=time.time())
     try:
         pred, meta = analyze_file(path, cfg)
         store.set_file(batch_id, name, status="done", prediction=pred, meta=meta, error=None, finished=time.time())
     except Exception as e:  # noqa: BLE001 — isolate per-file failures
         store.set_file(batch_id, name, status="error", error=f"{type(e).__name__}: {e}"[:500], finished=time.time())
     finally:
+        _release_memory()
+        _budget.release(reserved)
         if not KEEP_AUDIO:
             try:
                 path.unlink(missing_ok=True)  # confidential audio is not retained after analysis
