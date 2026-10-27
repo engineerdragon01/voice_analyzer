@@ -1,6 +1,8 @@
 # Experiment matrix — provided labeled calls (n=3)
 
-Zero-shot: labels are never shown to the model. Each Gemini config run twice to expose run-to-run variance.
+Zero-shot: labels are never shown to the model. Each Gemini config run twice to expose run-to-run variance (DSP-only is deterministic, run once).
+
+**How to read this:** with 3 calls, one call moves a field by 0.33, so rows within ~0.05 of each other are indistinguishable. Row A scores well only because its fixed "medium" intensity matches all three labels; it cannot output a non-neutral tone. Columns: tone/int./noise/sev./qual./overlap/silence = per-field accuracy; mean field acc = average over those 7 fields; $/audio-min = measured from API token usage.
 
 | Config | run | tone acc | tone macro-F1 | tone | int. | noise | sev. | qual. | overlap | silence | mean field acc | $/audio-min | wall s (3 files, 4 workers) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|

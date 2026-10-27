@@ -2,8 +2,20 @@
 
 **Hosted dashboard:** https://autoace-voice-analyzer.onrender.com · **Final config:** hybrid DSP + Gemini 3.5
 Flash-Lite (prompt v2, lossless audio, adaptive self-consistency k ≤ 3) · **Measured cost:** $0.0018–0.0019 per
-audio-minute (ceiling $0.003) · **Latency:** ~3.3 s of processing per audio-minute; a 29-minute, 34-file batch
-finishes in 24 s with 4 workers.
+audio-minute (ceiling $0.003) · **Throughput on the hosted 0.5-CPU instance:** ≈ 16 audio-minutes per wall-clock
+minute (≈ 8 s of processing per audio-minute per file) · **Provided calls:** 14 of 21 scored fields correct (0.667),
+both tone misses adjacent-class.
+
+## 0. Where each evaluation criterion is addressed
+
+| Criterion (weight) | What this submission does | Evidence |
+|---|---|---|
+| Hidden-set performance (45%) | Field-by-field fusion of three detectors and the LLM; spec definitions verbatim in the prompt; enum-constrained output; DSP owns objective fields | §1–§3; synthetic set: silence 1.00, noise 1.00, quality 0.75; provided calls 0.667 |
+| Cost efficiency (15%) | Flash-Lite, lossless-but-small audio, per-clip budget guard, compact schema for short clips, real token usage recorded per file | §4: $0.0018–0.0019/min measured; worst single file $0.0022/min |
+| Technical rigor (15%) | Six configurations compared (DSP-only, LLM-only ×2 prompts, hybrid k=1/k≤3, alternative model), each Gemini configuration run twice; zero-shot (no label leakage); thresholds set in wide data gaps and confirmed on a 34-clip synthetic set; offline re-scoring; calibration analysis | §2, §3, `results/` |
+| Production practicality (10%) | Per-file isolation, retries, fail-fast on permanent errors, memory budget for a 512 MB instance, crash-loop guard, audio deleted after analysis, single container | §5, §6, §7 |
+| Communication (5%) | This memo, a step-by-step README, per-call prediction table, explicit limitations | README, `../predictions/README.md`, §8 |
+| Hosted dashboard (10%) | Login; folder or ZIP upload; manifest validation report; live progress; per-file error reasons; results with label comparison; CSV/JSON download; batch history and delete | Verified in a browser against the hosted URL with five purpose-built batches (§6) |
 
 ## 1. Summary
 
@@ -100,7 +112,9 @@ differently, and the model's verdict on faint static flipped with the codec (Opu
 (1) send lossless FLAC, so every environment sends the same samples; (2) a deterministic click-rate static detector;
 (3) accept the LLM's static claims only with click evidence. Re-scoring the stored LLM outputs from all three codec
 runs gives identical noise fields. Intensity also moved on one call between codecs, a reminder that the LLM's
-borderline calls are fragile.
+borderline calls are fragile. Repeatability on identical input: labels were identical across repeated runs
+(experiment table, each configuration run twice); confidence can move by a few hundredths because the hosted model
+is not bit-for-bit deterministic even with fixed seeds (call_003: 0.75 locally, 0.81 on a hosted run).
 
 **Limits of this validation.**
 - n = 3 can't rank close configurations. The synthetic set is the evidence for objective fields; tone has no
@@ -181,9 +195,11 @@ should take roughly 4–7 minutes. A 1–2 CPU instance roughly halves the CPU-b
   fixed seeds; lossless audio to the API; the CLI shares the web code path (`analyzer/pipeline.py`);
   `eval/experiments.py` regenerates every table; `eval/refuse.py` re-scores fusion changes from stored model
   outputs without API calls.
-- **Verification:** 31 pytest cases (DSP on synthetic signals, schema, manifest, budget guard, fusion, API end to
-  end with a corrupt file, unmatched rows, a ZIP traversal attempt, batch deletion, the memory budget and the restart guard), plus Playwright browser tests run against
-  both a local server and the hosted Render deployment.
+- **Verification:** 32 pytest cases (DSP on synthetic signals, schema, manifest, budget guard, fusion, API end to
+  end with a corrupt file, unmatched rows, a ZIP traversal attempt, batch deletion, the memory budget, the restart guard and partial-label scoring), plus Playwright browser tests
+  against a local server and the hosted Render deployment. The hosted audit covered the spec's example batch (wav +
+  mp3 + labels), a folder upload, a manifest without `result_json`, a batch with missing / unlisted / unsupported /
+  corrupt / empty / malformed-label / duplicate entries and m4a / flac / uppercase extensions, and a batch with no CSV.
 
 ## 7. Data handling and external API disclosure
 
