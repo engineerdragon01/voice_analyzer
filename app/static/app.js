@@ -122,6 +122,26 @@ $("runBtn").onclick = async () => {
   }
 };
 $("cancelBtn").onclick = async () => { await api(`/api/batches/${batchId}/cancel`, { method: "POST" }); };
+$("deleteBtn").onclick = () => deleteBatch(batchId, $("deleteBtn").dataset.label, $("deleteBtn").dataset.total);
+
+// Returns true when the batch was deleted. Shows the server's reason (e.g. still processing) on failure.
+async function deleteBatch(id, label, total) {
+  if (!confirm(`Delete batch "${label}" and its ${total} result(s)? This cannot be undone.`)) return false;
+  try {
+    await api(`/api/batches/${id}`, { method: "DELETE" });
+  } catch (e) {
+    alert(`Could not delete: ${e.message}`);
+    return false;
+  }
+  if (id === batchId) {
+    clearInterval(pollTimer);
+    batchId = null;
+    $("resultsPanel").classList.add("hidden");
+    $("validatePanel").classList.add("hidden");
+  }
+  if (!$("historyPanel").classList.contains("hidden")) loadHistory();
+  return true;
+}
 
 function openBatch(id) {
   batchId = id;
@@ -143,6 +163,9 @@ async function poll() {
     `${c.done} succeeded · ${c.error} failed · status: ${s.batch.status}` +
     (s.batch.config.backend ? ` · backend ${s.batch.config.backend}` : "");
   $("cancelBtn").classList.toggle("hidden", s.batch.status !== "processing");
+  $("deleteBtn").classList.toggle("hidden", s.batch.status === "processing");
+  $("deleteBtn").dataset.label = s.batch.label;
+  $("deleteBtn").dataset.total = s.total;
   const sm = s.summary;
   $("stats").innerHTML = [
     ["Audio analyzed", `${sm.audio_minutes} min`],
@@ -152,7 +175,10 @@ async function poll() {
   ].map(([k, v]) => `<div class="stat"><div class="v">${esc(v)}</div><div class="k">${esc(k)}</div></div>`).join("");
   renderMetrics(s.metrics);
   renderTable(s.files);
-  if (s.batch.status === "completed") clearInterval(pollTimer);
+  if (s.batch.status === "completed") {
+    clearInterval(pollTimer);
+    if (!$("historyPanel").classList.contains("hidden")) loadHistory();  // re-enable its Delete button
+  }
 }
 
 function renderMetrics(m) {
@@ -207,16 +233,22 @@ function renderTable(files) {
 }
 
 // ------------------------------------------------------------ history
-$("historyBtn").onclick = async () => {
+$("historyBtn").onclick = () => {
   const p = $("historyPanel");
   p.classList.toggle("hidden");
-  if (p.classList.contains("hidden")) return;
+  if (!p.classList.contains("hidden")) loadHistory();
+};
+
+async function loadHistory() {
   const rows = await api("/api/batches");
+  if (!rows.length) { $("hist").innerHTML = `<tr><td class="muted">No batches yet.</td></tr>`; return; }
   $("hist").innerHTML = `<tr><th>Batch</th><th>Created</th><th>Status</th><th>Done</th><th>Failed</th><th>Total</th><th></th></tr>` +
     rows.map((b) => `<tr><td>${esc(b.label)}</td><td>${new Date(b.created * 1000).toLocaleString()}</td><td>${esc(b.status)}</td>` +
       `<td>${b.done || 0}</td><td>${b.failed || 0}</td><td>${b.total}</td>` +
-      `<td><button data-id="${esc(b.id)}" data-status="${esc(b.status)}">Open</button></td></tr>`).join("");
-  $("hist").querySelectorAll("button").forEach((btn) => btn.onclick = async () => {
+      `<td class="row"><button class="open" data-id="${esc(b.id)}" data-status="${esc(b.status)}">Open</button>` +
+      `<button class="del" data-id="${esc(b.id)}" data-label="${esc(b.label)}" data-total="${b.total}"` +
+      `${b.status === "processing" ? " disabled title=\"Cancel the batch before deleting\"" : ""}>Delete</button></td></tr>`).join("");
+  $("hist").querySelectorAll("button.open").forEach((btn) => btn.onclick = async () => {
     if (btn.dataset.status === "validated") {
       batchId = btn.dataset.id;
       const s = await api(`/api/batches/${batchId}`);
@@ -224,4 +256,6 @@ $("historyBtn").onclick = async () => {
     } else openBatch(btn.dataset.id);
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
-};
+  $("hist").querySelectorAll("button.del").forEach((btn) => btn.onclick = () =>
+    deleteBatch(btn.dataset.id, btn.dataset.label, btn.dataset.total));
+}

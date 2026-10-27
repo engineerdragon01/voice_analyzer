@@ -91,6 +91,15 @@ def get_files(batch_id: str) -> list[dict]:
     return out
 
 
+def delete_batch(batch_id: str) -> bool:
+    """Remove a batch and its per-file rows. Returns False if it did not exist."""
+    if not _q("SELECT id FROM batches WHERE id=?", (batch_id,)):
+        return False
+    _q("DELETE FROM files WHERE batch_id=?", (batch_id,))
+    _q("DELETE FROM batches WHERE id=?", (batch_id,))
+    return True
+
+
 def interrupted() -> list[tuple[str, str]]:
     rows = _q("SELECT batch_id, name FROM files WHERE status IN ('queued','processing')")
     return [(r["batch_id"], r["name"]) for r in rows]
