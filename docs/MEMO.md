@@ -11,7 +11,7 @@ both tone misses adjacent-class.
 | Criterion (weight) | What this submission does | Evidence |
 |---|---|---|
 | Hidden-set performance (45%) | Field-by-field fusion of three detectors and the LLM; spec definitions verbatim in the prompt; enum-constrained output; DSP owns objective fields | §1–§3; synthetic set: silence 1.00, noise 1.00, quality 0.75; provided calls 0.667 |
-| Cost efficiency (15%) | Flash-Lite, lossless-but-small audio, per-clip budget guard, compact schema for short clips, real token usage recorded per file | §4: $0.0018–0.0019/min measured; worst single file $0.0022/min |
+| Cost efficiency (15%) | Flash-Lite, lossless-but-small audio, per-clip budget guard, compact schema for short clips, real token usage recorded per file; ~40% of the budget deliberately left unused because larger models and more samples showed no accuracy gain | §2 and §4: $0.0018–0.0019/min measured; worst single file $0.0022/min |
 | Technical rigor (15%) | Six configurations compared (DSP-only, LLM-only ×2 prompts, hybrid k=1/k≤3, alternative model), each Gemini configuration run twice; zero-shot (no label leakage); thresholds set in wide data gaps and confirmed on a 34-clip synthetic set; offline re-scoring; calibration analysis | §2, §3, `results/` |
 | Production practicality (10%) | Per-file isolation, retries, fail-fast on permanent errors, memory budget for a 512 MB instance, crash-loop guard, audio deleted after analysis, single container | §5, §6, §7 |
 | Communication (5%) | This memo, a step-by-step README, per-call prediction table, explicit limitations | README, `../predictions/README.md`, §8 |
@@ -52,6 +52,18 @@ output a non-neutral tone, so its tone macro-F1 on a realistic hidden set is cap
 (B, C) show why the DSP detectors matter: the LLM alone is unreliable on noise, silence and severity. Larger models
 (Gemini 3.5 Flash, 3.8 Flash; single runs) made **the same tone choices** at ~2× the cost, and 3.5 Flash
 hallucinated noise on call_001, so model size was not the bottleneck. Gemini 2.5 models are closed to new API users.
+
+**Accuracy vs cost: what the evidence supports.** Among the configurations I tested, the final system has the best
+validated accuracy within the cost ceiling. Spending more did not buy accuracy on the provided calls: larger models
+and extra samples changed no labels. So I kept about 40% of the budget (≈ $0.001 per audio-minute) unused on
+purpose rather than spend it without evidence. I do not claim this is the maximum accuracy achievable:
+- With 3 calls I cannot rank close configurations.
+- Three fields are at 1/3 (tone, intensity, overlap), and the misses are systematic rather than random: tone and
+  intensity are one step more cautious than the labels, and overlap is under-called on these mono recordings. That
+  pattern points to the labeler's conventions, which a bigger model does not fix.
+- The lever I deliberately did not pull is calibrating to those conventions from three examples, which would overfit.
+  With more labeled calls it is the first thing I would tune. The cost headroom could then fund a stronger tone
+  model or more samples, if they prove their value.
 
 **Iterations**, each justified by the spec or by measurement, never by one call alone:
 1. **Prompt v2.** AutoAce calls often have an AI voice agent on the business side, so v2 tells the model that
@@ -157,6 +169,10 @@ $0.0025/min. Clips under 20 s use a compact schema without the free-text evidenc
 29.1 min = **$0.0018/min** (worst file $0.0022); a 15 s clip $0.0024/min. Every request's real token usage is shown
 per file and per batch in the dashboard. `GEMINI_SAMPLES=1` halves cost on longer calls (~$0.0009/min) with no
 measured accuracy loss, at the price of a less informative confidence score.
+
+**Headroom.** The measured cost leaves ≈ $0.001 per audio-minute (about 40%) under the ceiling. I left it unused
+because the options it could buy (a larger model for tone, more samples) showed no accuracy gain on the provided
+calls (§2). With more labeled calls, it is the budget for whichever of those proves its value.
 
 Not included: hosting (Render Starter ~$7/month flat, about $0.00002/min at 10k min/day) and DSP compute (< 0.3 s
 CPU per audio-minute). Clips under ~12 s can't meet $0.003/min alone because of the fixed prompt overhead; packing

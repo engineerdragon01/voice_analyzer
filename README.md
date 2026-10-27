@@ -10,7 +10,8 @@ plus a command-line tool that runs the same pipeline offline.
 - **Result tables:** [`docs/results/`](docs/results/) · **Predictions for the provided calls:** [`predictions/`](predictions/)
 
 **At a glance:** hybrid of deterministic signal processing and Gemini 3.5 Flash-Lite · measured
-**$0.0018–0.0019 per audio-minute** (ceiling $0.003) · ≈ 16 audio-minutes processed per wall-clock minute on the
+**$0.0018–0.0019 per audio-minute** (ceiling $0.003; ~40% headroom kept deliberately, since larger models and more
+samples showed no accuracy gain) · ≈ 16 audio-minutes processed per wall-clock minute on the
 hosted 0.5-CPU instance · 32 automated tests.
 
 ---
