@@ -262,6 +262,20 @@ def cancel(batch_id: str):
     return {"ok": True}
 
 
+@app.delete("/api/batches/{batch_id}")
+def delete(batch_id: str):
+    b = store.get_batch(batch_id)
+    if not b:
+        raise HTTPException(404, "Unknown batch.")
+    if any(f["status"] in ("queued", "processing") for f in store.get_files(batch_id)):
+        raise HTTPException(409, "Batch is still processing — cancel it first, then delete.")
+    store.delete_batch(b["id"])
+    # Path built from the stored id (not the raw URL segment); also removes any leftover audio.
+    shutil.rmtree(DATA_DIR / "batches" / b["id"], ignore_errors=True)
+    _cancel.discard(b["id"])
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------- results
 @app.get("/api/config")
 def config_info():

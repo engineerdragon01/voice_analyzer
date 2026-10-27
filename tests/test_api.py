@@ -91,3 +91,42 @@ def test_bad_zip_rejected(client):
     _login(client)
     r = client.post("/api/batches", files=[("files", ("b.zip", b"not a zip", "application/zip"))])
     assert r.status_code == 400
+
+
+def _completed_dsp_batch(client, tmp_path):
+    r = client.post("/api/batches", files=[("files", ("batch.zip", _zip(tmp_path), "application/zip"))])
+    bid = r.json()["batch_id"]
+    client.post(f"/api/batches/{bid}/run", data={"backend": "dsp"})
+    for _ in range(100):
+        if client.get(f"/api/batches/{bid}").json()["batch"]["status"] == "completed":
+            return bid
+        time.sleep(0.1)
+    raise AssertionError("batch did not complete")
+
+
+def test_delete_batch(client, tmp_path):
+    _login(client)
+    bid = _completed_dsp_batch(client, tmp_path)
+    import app.main as m
+    assert (m.DATA_DIR / "batches" / bid).exists()
+    assert client.delete(f"/api/batches/{bid}").status_code == 200
+    assert client.get(f"/api/batches/{bid}").status_code == 404
+    assert not (m.DATA_DIR / "batches" / bid).exists()
+    assert bid not in [b["id"] for b in client.get("/api/batches").json()]
+    assert client.delete(f"/api/batches/{bid}").status_code == 404
+
+
+def test_delete_refused_while_processing(client, tmp_path):
+    _login(client)
+    a = write_wav(tmp_path / "x.wav", tone(2)).read_bytes()
+    bid = client.post("/api/batches", files=[("files", ("x.wav", a, "audio/wav"))]).json()["batch_id"]
+    from app import store
+    store.set_file(bid, "x.wav", status="queued")
+    r = client.delete(f"/api/batches/{bid}")
+    assert r.status_code == 409 and "cancel" in r.json()["detail"].lower()
+    store.set_file(bid, "x.wav", status="error")
+    assert client.delete(f"/api/batches/{bid}").status_code == 200
+
+
+def test_delete_requires_login(client):
+    assert client.delete("/api/batches/anything").status_code == 401

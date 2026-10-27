@@ -158,8 +158,8 @@ API rate limit; running a clip's samples concurrently would cut long-clip latenc
   fixed seeds; lossless audio to the API; the CLI shares the web code path (`analyzer/pipeline.py`);
   `eval/experiments.py` regenerates every table; `eval/refuse.py` re-scores fusion changes from stored model
   outputs without API calls.
-- **Verification:** 25 pytest cases (DSP on synthetic signals, schema, manifest, budget guard, fusion, API end to
-  end with a corrupt file, unmatched rows and a ZIP traversal attempt), plus a Playwright browser test run against
+- **Verification:** 28 pytest cases (DSP on synthetic signals, schema, manifest, budget guard, fusion, API end to
+  end with a corrupt file, unmatched rows, a ZIP traversal attempt, and batch deletion), plus Playwright browser tests run against
   both a local server and the hosted Render deployment.
 
 ## 7. Data handling and external API disclosure

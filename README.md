@@ -95,6 +95,9 @@ Supported audio: wav, mp3, ogg, opus, m4a, mp4, aac, flac, webm, wma, amr. Valid
 audio, audio not in the CSV (still processed), unsupported files, malformed `result_json`. A corrupt file is
 marked as failed with the reason; the rest of the batch continues.
 
+Batches can be deleted from the dashboard (**Batches → Delete**, or **Delete batch** on an open result). Deleting
+removes the batch's results and any leftover files; a running batch must be cancelled first.
+
 ## Data handling
 
 - Audio is sent only to the Gemini API (paid tier: not used to train Google models); uploaded files are deleted
